@@ -242,25 +242,24 @@ def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> st
 
 Judge は `verdict` とは別に `patch_effect` を返す．`compliant` は最終コードが制約に従っていることを示すだけで，patch がその制約を新たに満たしたとは限らない．そのため主な成功数は `patch_effect=applied_by_patch` かつ `verdict=compliant` の `newly_satisfied` として集計する．`already_satisfied` は「元から満たされていた制約」なので成功カウントには入れない．
 
-### AgentRunConfig（`config/experiment_spec_pilot.json` / `config/experiment_spec_full.json` の `agent_configs[]`）
+### Agent matrix（`config/experiment_spec_pilot.json` / `config/experiment_spec_full.json`）
 
-1 要素 = 1 run．主要フィールド：
+通常は `agent_matrix` で model × context の直積を短く書く．loader が `agent_configs[]` に展開し，`run_id` は `<prefix>_<model>_<context>` になる．`agent_configs[]` を直接書く明示形式も互換用に残しているが，pilot / full では使わない．
 
 | フィールド | 説明 |
 | --- | --- |
-| `run_id` | 成果物ディレクトリ名．実験同定用 |
-| `model` | モデル ID（`opencode-go/qwen3.6-plus`, `opencode-go/minimax-m2.7`, `opencode-go/kimi-k2.5` 等） |
-| `context_strategy` | 上記 strategy のいずれか |
+| `run_id_prefix` | `pilot` / `full` など成果物ディレクトリ名の prefix |
+| `models` | モデル ID の配列（例：`opencode-go/qwen3.6-plus`） |
+| `context_strategies` | 比較する context strategy の配列 |
 | `max_tokens` | agent command に環境変数 `MAX_TOKENS` として渡す上限 |
 | `docker` | Docker agentic 実行設定（`image` / `agent_command` / `docker_args`） |
-| `initial_context_files` | ablation 用．初期 prompt に本文を入れるファイルパス |
-| `initial_constraint_ids` | ablation 用．inline / attached constraints で使う constraint ID |
-| `context_files` | `/bench` に read-only mount する追加 context file |
 | `worktree_strategy` | 既定 `cow_snapshot`．必要なら `git_worktree` に切替可能 |
 | `skip_existing` | 既存 `predicted_patch.diff` があれば Agent 実行を skip |
 | `keep_worktree` / `keep_failed_worktree` | 成功/失敗時に `/work` の host 側 copy を残すか |
 
 `agent_command` は container 内で実行される shell command で，`$AGENT_PROMPT_PATH`，`$TASK_PATH`，`$CONSTRAINTS_PATH`，`$MODEL`，`$MAX_TOKENS` を参照できる．
+
+`api_conventions_md`，`atomic_constraints_73_json`，`normative_constraints_223_json` の `context_files` は loader が既定値を補う．個別 run ごとに特殊な mount や token 数を変えたい場合だけ，明示的な `agent_configs[]` を使う．
 
 ### WorktreeStrategy
 
