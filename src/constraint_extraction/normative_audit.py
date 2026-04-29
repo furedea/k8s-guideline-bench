@@ -108,6 +108,7 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
     for start_line, end_line, section, kind, block_text in blocks:
         if kind == CandidateKind.BULLET:
             normalized = _normalize_block_text(block_text)
+            lead_in_span = None
             if pending_bullet_lead_in is not None:
                 lead_in_text, lead_in_span = pending_bullet_lead_in
                 normalized = f"{lead_in_text} {normalized}"
@@ -118,7 +119,7 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
                         section=section,
                         kind=kind,
                         text=normalized,
-                        lead_in_span=lead_in_span if pending_bullet_lead_in is not None else None,
+                        lead_in_span=lead_in_span,
                     ),
                 )
             continue

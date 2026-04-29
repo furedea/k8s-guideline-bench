@@ -19,6 +19,10 @@ def _client_spec() -> client_spec.ClientSpec:
     )
 
 
+def _judge_config_from_raw(document: dict[str, object]) -> judge.JudgeConfig:
+    return judge.JudgeConfig.model_validate(document)
+
+
 def _constraint() -> atomic_constraint.AtomicConstraint:
     return atomic_constraint.AtomicConstraint(
         id="atom_001",
@@ -95,12 +99,14 @@ def test_judge_config_defaults_to_reference_based_mode() -> None:
 
 
 def test_judge_config_accepts_patch_only_mode_string() -> None:
-    config = judge.JudgeConfig(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system_prompt="judge",
-        client=_client_spec(),
-        judge_mode="patch_only",
+    config = _judge_config_from_raw(
+        {
+            "model": "claude-opus-4-7",
+            "max_tokens": 1024,
+            "system_prompt": "judge",
+            "client": _client_spec().model_dump(mode="json"),
+            "judge_mode": "patch_only",
+        },
     )
 
     assert config.judge_mode == judge.JudgeMode.PATCH_ONLY
@@ -252,16 +258,18 @@ def test_judge_instance_collects_judgments_and_persists_result(tmp_path: Path) -
     assert document["judgments"][0]["verdict"] == "compliant"
 
 
-def _stub_client_with_counter() -> type:
-    class StubClient:
-        call_count = 0
+class _CountingStubClient:
+    def __init__(self) -> None:
+        self.call_count = 0
 
-        def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
-            _ = system, user, model, max_tokens
-            StubClient.call_count += 1
-            return '{"verdict": "compliant", "confidence": 0.7, "rationale": "ok"}'
+    def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+        _ = system, user, model, max_tokens
+        self.call_count += 1
+        return '{"verdict": "compliant", "confidence": 0.7, "rationale": "ok"}'
 
-    return StubClient
+
+def _stub_client_with_counter() -> _CountingStubClient:
+    return _CountingStubClient()
 
 
 def test_judge_instance_skip_existing_returns_existing_judgments_without_calling_client(
@@ -288,7 +296,7 @@ def test_judge_instance_skip_existing_returns_existing_judgments_without_calling
         json.dumps(preexisting.model_dump(mode="json")),
         encoding="utf-8",
     )
-    stub_client_cls = _stub_client_with_counter()
+    stub_client = _stub_client_with_counter()
     config = judge.JudgeConfig(
         model="claude-opus-4-7",
         max_tokens=1024,
@@ -302,13 +310,13 @@ def test_judge_instance_skip_existing_returns_existing_judgments_without_calling
         predicted_patch="",
         gold_patch="",
         constraints=constraints,
-        client=stub_client_cls(),
+        client=stub_client,
         config=config,
         run_id="run-001",
         results_root=results_root,
     )
 
-    assert stub_client_cls.call_count == 0
+    assert stub_client.call_count == 0
     assert result.judgments[0].verdict == judge.JudgeVerdict.VIOLATED
     assert result.judgments[0].rationale == "cached"
 
@@ -322,7 +330,7 @@ def test_judge_instance_skip_existing_false_overwrites_existing_judgments(
     output_dir = results_root / "run-001" / "42"
     output_dir.mkdir(parents=True)
     _ = (output_dir / "judgments.json").write_text("stale", encoding="utf-8")
-    stub_client_cls = _stub_client_with_counter()
+    stub_client = _stub_client_with_counter()
     config = judge.JudgeConfig(
         model="claude-opus-4-7",
         max_tokens=1024,
@@ -336,13 +344,13 @@ def test_judge_instance_skip_existing_false_overwrites_existing_judgments(
         predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
         gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
         constraints=constraints,
-        client=stub_client_cls(),
+        client=stub_client,
         config=config,
         run_id="run-001",
         results_root=results_root,
     )
 
-    assert stub_client_cls.call_count == 1
+    assert stub_client.call_count == 1
     assert result.judgments[0].verdict == judge.JudgeVerdict.COMPLIANT
 
 
@@ -383,12 +391,14 @@ def test_judge_instance_with_apply_verification_proceeds_when_patch_applies(
             StubClient.call_count += 1
             return '{"verdict": "compliant", "confidence": 0.5, "rationale": "ok"}'
 
-    config = judge.JudgeConfig(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system_prompt="judge",
-        client=_client_spec(),
-        patch_verification="apply",
+    config = _judge_config_from_raw(
+        {
+            "model": "claude-opus-4-7",
+            "max_tokens": 1024,
+            "system_prompt": "judge",
+            "client": _client_spec().model_dump(mode="json"),
+            "patch_verification": "apply",
+        },
     )
 
     result = judge.judge_instance(
@@ -467,12 +477,14 @@ def test_judge_instance_with_build_verification_proceeds_when_build_passes(
             _ = system, user, model, max_tokens
             return '{"verdict": "compliant", "confidence": 0.5, "rationale": "ok"}'
 
-    config = judge.JudgeConfig(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system_prompt="judge",
-        client=_client_spec(),
-        patch_verification="build",
+    config = _judge_config_from_raw(
+        {
+            "model": "claude-opus-4-7",
+            "max_tokens": 1024,
+            "system_prompt": "judge",
+            "client": _client_spec().model_dump(mode="json"),
+            "patch_verification": "build",
+        },
     )
 
     result = judge.judge_instance(
@@ -566,12 +578,14 @@ def test_judge_instance_with_test_verification_marks_test_failure_when_tests_fai
             _ = system, user, model, max_tokens
             return '{"verdict": "compliant", "confidence": 0.5, "rationale": "ok"}'
 
-    config = judge.JudgeConfig(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system_prompt="judge",
-        client=_client_spec(),
-        patch_verification="test",
+    config = _judge_config_from_raw(
+        {
+            "model": "claude-opus-4-7",
+            "max_tokens": 1024,
+            "system_prompt": "judge",
+            "client": _client_spec().model_dump(mode="json"),
+            "patch_verification": "test",
+        },
     )
 
     result = judge.judge_instance(
@@ -896,12 +910,14 @@ def test_judge_instance_llm_and_hybrid_selection_skips_machine_checkable(
                     break
             return '{"verdict": "compliant", "confidence": 0.5, "rationale": "ok"}'
 
-    config = judge.JudgeConfig(
-        model="claude-opus-4-7",
-        max_tokens=1024,
-        system_prompt="judge",
-        client=_client_spec(),
-        judge_target_selection="llm_and_hybrid",
+    config = _judge_config_from_raw(
+        {
+            "model": "claude-opus-4-7",
+            "max_tokens": 1024,
+            "system_prompt": "judge",
+            "client": _client_spec().model_dump(mode="json"),
+            "judge_target_selection": "llm_and_hybrid",
+        },
     )
     results_root = tmp_path / "results"
 

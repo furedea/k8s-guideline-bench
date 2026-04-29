@@ -531,7 +531,7 @@ def _gh_api_json(path: str, paginate: bool = False) -> Any:
             for page in pages:
                 flattened.extend(page)
             return flattened
-    return cast(Any, payload)
+    return payload
 
 
 def _read_cache(cache_dir: Path, pr_number: int) -> PullRequestDetail | None:
