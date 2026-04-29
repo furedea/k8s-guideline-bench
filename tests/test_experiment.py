@@ -338,3 +338,61 @@ def test_load_experiment_spec_parses_attached_context_files(tmp_path: Path) -> N
     assert config.worktree_strategy == agent_runner.WorktreeStrategy.COW_SNAPSHOT
     assert config.context_files[0].source_path == Path("docs/source/api-conventions.md")
     assert config.context_files[0].bench_path == "api-conventions.md"
+
+
+def test_load_experiment_spec_expands_agent_matrix(tmp_path: Path) -> None:
+    spec_path = tmp_path / "experiment.json"
+    _ = spec_path.write_text(
+        json.dumps(
+            {
+                "datasets_root": "datasets",
+                "results_root": "results/pilot",
+                "repo_path": "kubernetes",
+                "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
+                "agent_matrix": {
+                    "run_id_prefix": "pilot",
+                    "models": [
+                        "opencode-go/qwen3.6-plus",
+                        "opencode-go/minimax-m2.7",
+                    ],
+                    "context_strategies": [
+                        "no_constraints",
+                        "api_conventions_md",
+                        "atomic_constraints_73_json",
+                    ],
+                    "max_tokens": 8192,
+                    "docker": {
+                        "image": "k8s-bench-agent",
+                        "agent_command": 'opencode run --model "$MODEL" < "$AGENT_PROMPT_PATH"',
+                    },
+                    "skip_existing": True,
+                },
+                "judge_config": {
+                    "model": "sonnet",
+                    "max_tokens": 256,
+                    "system_prompt": "judge",
+                    "client": {
+                        "client_type": "claude_cli",
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = experiment.load_experiment_spec(spec_path)
+
+    assert tuple(config.run_id for config in loaded.agent_configs) == (
+        "pilot_qwen3_6_plus_no_constraints",
+        "pilot_qwen3_6_plus_api_conventions_md",
+        "pilot_qwen3_6_plus_atomic_constraints_73_json",
+        "pilot_minimax_m2_7_no_constraints",
+        "pilot_minimax_m2_7_api_conventions_md",
+        "pilot_minimax_m2_7_atomic_constraints_73_json",
+    )
+    api_doc = loaded.agent_configs[1]
+    assert api_doc.context_files[0].source_path == Path("docs/source/api-conventions.md")
+    assert api_doc.context_files[0].bench_path == "api-conventions.md"
+    atomic = loaded.agent_configs[2]
+    assert atomic.context_files[0].source_path == Path("constraints/api_conventions_atomic_constraints_73.json")
+    assert atomic.context_files[0].bench_path == "api_conventions_atomic_constraints.json"

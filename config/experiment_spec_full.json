@@ -4,58 +4,24 @@
   "repo_path": "kubernetes",
   "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
   "instance_limit": null,
-  "agent_configs": [
-    {
-      "run_id": "full_qwen3_6_plus_no_constraints",
-      "model": "opencode-go/qwen3.6-plus",
-      "max_tokens": 8192,
-      "context_strategy": "no_constraints",
-      "docker": {
-        "image": "k8s-bench-agent",
-        "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
-        "docker_args": []
-      },
-      "skip_existing": true
+  "agent_matrix": {
+    "run_id_prefix": "full",
+    "models": [
+      "opencode-go/qwen3.6-plus"
+    ],
+    "context_strategies": [
+      "no_constraints",
+      "api_conventions_md",
+      "atomic_constraints_73_json"
+    ],
+    "max_tokens": 8192,
+    "docker": {
+      "image": "k8s-bench-agent",
+      "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
+      "docker_args": []
     },
-    {
-      "run_id": "full_qwen3_6_plus_api_conventions_md",
-      "model": "opencode-go/qwen3.6-plus",
-      "max_tokens": 8192,
-      "context_strategy": "api_conventions_md",
-      "docker": {
-        "image": "k8s-bench-agent",
-        "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
-        "docker_args": []
-      },
-      "context_files": [
-        {
-          "source_path": "docs/source/api-conventions.md",
-          "bench_path": "api-conventions.md",
-          "description": "Kubernetes API conventions source document."
-        }
-      ],
-      "skip_existing": true
-    },
-    {
-      "run_id": "full_qwen3_6_plus_atomic_constraints_73_json",
-      "model": "opencode-go/qwen3.6-plus",
-      "max_tokens": 8192,
-      "context_strategy": "atomic_constraints_73_json",
-      "docker": {
-        "image": "k8s-bench-agent",
-        "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
-        "docker_args": []
-      },
-      "context_files": [
-        {
-          "source_path": "constraints/api_conventions_atomic_constraints_73.json",
-          "bench_path": "api_conventions_atomic_constraints.json",
-          "description": "Atomic constraints used by the evaluator."
-        }
-      ],
-      "skip_existing": true
-    }
-  ],
+    "skip_existing": true
+  },
   "judge_config": {
     "model": "sonnet",
     "max_tokens": 1024,

@@ -29,6 +29,41 @@ logger = logging.getLogger(__name__)
 ClientFactory = Callable[[client_spec.ClientSpec], completion_client.CompletionClient]
 
 
+class AgentMatrixConfig(base.FrozenModel):
+    """Compact Cartesian product specification for agent run configs."""
+
+    run_id_prefix: str
+    models: tuple[str, ...]
+    context_strategies: tuple[agent_runner.ContextStrategy, ...]
+    max_tokens: int
+    docker: agent_runner.DockerAgentConfig
+    skip_existing: bool = False
+    keep_worktree: bool = False
+    keep_failed_worktree: bool = True
+    worktree_strategy: agent_runner.WorktreeStrategy = agent_runner.WorktreeStrategy.COW_SNAPSHOT
+
+    @pydantic.field_validator("models", mode="before")
+    @classmethod
+    def validate_models(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(cast("list[str]", value))
+        return value
+
+    @pydantic.field_validator("context_strategies", mode="before")
+    @classmethod
+    def validate_context_strategies(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(agent_runner.ContextStrategy(item) if isinstance(item, str) else item for item in value)
+        return value
+
+    @pydantic.field_validator("worktree_strategy", mode="before")
+    @classmethod
+    def validate_worktree_strategy(cls, value: object) -> object:
+        if isinstance(value, str):
+            return agent_runner.WorktreeStrategy(value)
+        return value
+
+
 class ExperimentSpec(base.FrozenModel):
     """Top-level experiment configuration independent of dataset construction."""
 
@@ -37,8 +72,9 @@ class ExperimentSpec(base.FrozenModel):
     repo_path: Path
     constraints_file: Path
     instance_limit: int | None = None
-    agent_configs: tuple[agent_runner.AgentRunConfig, ...]
     judge_config: judge.JudgeConfig
+    agent_configs: tuple[agent_runner.AgentRunConfig, ...] = ()
+    agent_matrix: AgentMatrixConfig | None = None
 
     @pydantic.field_validator("datasets_root", "results_root", "repo_path", "constraints_file", mode="before")
     @classmethod
@@ -53,6 +89,18 @@ class ExperimentSpec(base.FrozenModel):
         if isinstance(value, list):
             return tuple(cast("list[agent_runner.AgentRunConfig]", value))
         return value
+
+    @pydantic.model_validator(mode="after")
+    def validate_agent_config_source(self) -> ExperimentSpec:
+        if self.agent_configs and self.agent_matrix is not None:
+            msg = "Specify either `agent_configs` or `agent_matrix`, not both."
+            raise ValueError(msg)
+        if not self.agent_configs and self.agent_matrix is None:
+            msg = "ExperimentSpec requires `agent_configs` or `agent_matrix`."
+            raise ValueError(msg)
+        if self.agent_matrix is None:
+            return self
+        return self.model_copy(update={"agent_configs": _expand_agent_matrix(self.agent_matrix)})
 
 
 class RunReport(base.FrozenModel):
@@ -145,6 +193,57 @@ def run_experiment(
 
 
 _SPEC_ADAPTER = pydantic.TypeAdapter(ExperimentSpec)
+
+
+_CONTEXT_FILE_DEFAULTS: dict[
+    agent_runner.ContextStrategy,
+    tuple[agent_runner.AttachedContextFile, ...],
+] = {
+    agent_runner.ContextStrategy.API_CONVENTIONS_MD: (
+        agent_runner.AttachedContextFile(
+            source_path=Path("docs/source/api-conventions.md"),
+            bench_path="api-conventions.md",
+            description="Kubernetes API conventions source document.",
+        ),
+    ),
+    agent_runner.ContextStrategy.ATOMIC_CONSTRAINTS_73_JSON: (
+        agent_runner.AttachedContextFile(
+            source_path=Path("constraints/api_conventions_atomic_constraints_73.json"),
+            bench_path="api_conventions_atomic_constraints.json",
+            description="Atomic constraints used by the evaluator.",
+        ),
+    ),
+    agent_runner.ContextStrategy.NORMATIVE_CONSTRAINTS_223_JSON: (
+        agent_runner.AttachedContextFile(
+            source_path=Path("constraints/api_conventions_normative_constraints_223.json"),
+            bench_path="api_conventions_normative_constraints.json",
+            description="Normative constraints used for ablation.",
+        ),
+    ),
+}
+
+
+def _expand_agent_matrix(matrix: AgentMatrixConfig) -> tuple[agent_runner.AgentRunConfig, ...]:
+    return tuple(
+        agent_runner.AgentRunConfig(
+            run_id=f"{matrix.run_id_prefix}_{_run_id_component(model)}_{context.value}",
+            model=model,
+            max_tokens=matrix.max_tokens,
+            context_strategy=context,
+            docker=matrix.docker,
+            context_files=_CONTEXT_FILE_DEFAULTS.get(context, ()),
+            skip_existing=matrix.skip_existing,
+            keep_worktree=matrix.keep_worktree,
+            keep_failed_worktree=matrix.keep_failed_worktree,
+            worktree_strategy=matrix.worktree_strategy,
+        )
+        for model in matrix.models
+        for context in matrix.context_strategies
+    )
+
+
+def _run_id_component(model: str) -> str:
+    return model.removeprefix("opencode-go/").replace(".", "_").replace("-", "_").replace("/", "_")
 
 
 def load_experiment_spec(spec_path: Path) -> ExperimentSpec:
