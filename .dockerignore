@@ -1,0 +1,6 @@
+# Keep the Docker build context small: only docker/ is COPYed into the image.
+# The Kubernetes clone is created inside the image via `git clone`, not copied
+# from host — excluding it here prevents multi-GB context uploads.
+
+*
+!docker/

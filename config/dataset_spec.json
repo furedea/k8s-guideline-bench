@@ -1,0 +1,38 @@
+{
+  "github_repo": "kubernetes/kubernetes",
+  "repo_path": "kubernetes",
+  "target_paths": [
+    "api",
+    "pkg/apis",
+    "staging/src/k8s.io/api",
+    "staging/src/k8s.io/apimachinery",
+    "staging/src/k8s.io/apiserver"
+  ],
+  "since": null,
+  "pr_search_labels": [
+    "kind/cleanup"
+  ],
+  "pr_search_limit": 100000,
+  "pr_search_window_days": 30,
+  "datasets_root": "datasets",
+  "pr_cache_dir": "cache/pulls",
+  "exclusion_patterns": [
+    "**/zz_generated_*.go",
+    "**/*.pb.go",
+    "vendor/**"
+  ],
+  "required_pr_labels": [
+    "kind/cleanup"
+  ],
+  "excluded_pr_labels": [
+    "kind/api-change",
+    "kind/feature",
+    "kind/bug"
+  ],
+  "min_changed_files": 1,
+  "max_changed_files": null,
+  "min_changed_lines": 5,
+  "max_changed_lines": null,
+  "verification_level": "none",
+  "pr_limit": null
+}

@@ -1,0 +1,47 @@
+from pathlib import Path
+
+import main
+import pytest
+import source_selection
+from pytest_mock import MockerFixture
+
+
+def test_resolve_output_path_uses_project_root_for_relative_path() -> None:
+    project_root = Path("/tmp/project")
+
+    resolved = main._resolve_output_path(project_root, Path("results/report.md"))
+
+    assert resolved == Path("/tmp/project/results/report.md")
+
+
+def test_resolve_source_paths_joins_repo_root_for_relative_source_paths() -> None:
+    repo_root = Path("/tmp/kubernetes")
+    source = source_selection.GuidelineSource(
+        id="api_rules",
+        title="API rules",
+        path=Path("api/api-rules/README.md"),
+        summary="API rules",
+        keyword_patterns=(r"\bapi\b",),
+        rationale="API conventions",
+    )
+
+    resolved_sources = main._resolve_source_paths(repo_root, (source,))
+
+    assert resolved_sources[0].path == Path("/tmp/kubernetes/api/api-rules/README.md")
+
+
+def test_resolve_repo_path_joins_project_root_for_relative_config_path() -> None:
+    resolved = main._resolve_repo_path(
+        Path("/tmp/project"),
+        None,
+        Path("kubernetes"),
+    )
+
+    assert resolved == Path("/tmp/project/kubernetes")
+
+
+def test_resolve_repo_path_requires_explicit_input(mocker: MockerFixture) -> None:
+    mocker.patch("main.os.getenv", return_value=None)
+
+    with pytest.raises(ValueError):
+        _ = main._resolve_repo_path(Path("/tmp/project"), None, None)

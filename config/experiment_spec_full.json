@@ -1,0 +1,70 @@
+{
+  "datasets_root": "datasets",
+  "results_root": "results/full",
+  "repo_path": "kubernetes",
+  "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
+  "instance_limit": null,
+  "agent_configs": [
+    {
+      "run_id": "full_deepseek_v4_flash_no_constraints",
+      "model": "opencode-go/deepseek-v4-flash",
+      "max_tokens": 8192,
+      "context_strategy": "no_constraints",
+      "docker": {
+        "image": "k8s-bench-agent",
+        "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
+        "docker_args": []
+      },
+      "skip_existing": true
+    },
+    {
+      "run_id": "full_deepseek_v4_flash_api_conventions_md",
+      "model": "opencode-go/deepseek-v4-flash",
+      "max_tokens": 8192,
+      "context_strategy": "api_conventions_md",
+      "docker": {
+        "image": "k8s-bench-agent",
+        "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
+        "docker_args": []
+      },
+      "context_files": [
+        {
+          "source_path": "docs/source/api-conventions.md",
+          "bench_path": "api-conventions.md",
+          "description": "Kubernetes API conventions source document."
+        }
+      ],
+      "skip_existing": true
+    },
+    {
+      "run_id": "full_deepseek_v4_flash_atomic_constraints_73_json",
+      "model": "opencode-go/deepseek-v4-flash",
+      "max_tokens": 8192,
+      "context_strategy": "atomic_constraints_73_json",
+      "docker": {
+        "image": "k8s-bench-agent",
+        "agent_command": "opencode run --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
+        "docker_args": []
+      },
+      "context_files": [
+        {
+          "source_path": "constraints/api_conventions_atomic_constraints_73.json",
+          "bench_path": "api_conventions_atomic_constraints.json",
+          "description": "Atomic constraints used by the evaluator."
+        }
+      ],
+      "skip_existing": true
+    }
+  ],
+  "judge_config": {
+    "model": "kimi-k2-thinking",
+    "max_tokens": 1024,
+    "system_prompt": "You are an impartial judge evaluating whether a code patch newly satisfies a single atomic Kubernetes API convention rule. Respond strictly with a JSON object containing `verdict` (compliant | violated | not_applicable), `patch_effect` (applied_by_patch | already_satisfied | not_relevant | unknown), `confidence` (0..1), and `rationale`.",
+    "client": {
+      "client_type": "openai_compatible",
+      "api_key_env": "OPENCODE_API_KEY",
+      "base_url": "https://opencode.ai/zen/go/v1"
+    },
+    "judge_mode": "reference_based"
+  }
+}
