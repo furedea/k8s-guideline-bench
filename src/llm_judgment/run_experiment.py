@@ -1,7 +1,7 @@
 """CLI for running agent + judge experiments over a prebuilt dataset.
 
 Usage:
-    uv run python src/llm_judgment/run_experiment.py --spec config/experiment_spec.json
+    uv run python src/llm_judgment/run_experiment.py --spec config/experiment_spec_pilot.json
 """
 
 import argparse
