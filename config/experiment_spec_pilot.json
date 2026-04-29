@@ -6,8 +6,8 @@
   "instance_limit": 10,
   "agent_configs": [
     {
-      "run_id": "pilot_deepseek_v4_flash_no_constraints",
-      "model": "opencode-go/deepseek-v4-flash",
+      "run_id": "pilot_qwen3_6_plus_no_constraints",
+      "model": "opencode-go/qwen3.6-plus",
       "max_tokens": 8192,
       "context_strategy": "no_constraints",
       "docker": {
@@ -18,8 +18,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_deepseek_v4_flash_api_conventions_md",
-      "model": "opencode-go/deepseek-v4-flash",
+      "run_id": "pilot_qwen3_6_plus_api_conventions_md",
+      "model": "opencode-go/qwen3.6-plus",
       "max_tokens": 8192,
       "context_strategy": "api_conventions_md",
       "docker": {
@@ -37,8 +37,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_deepseek_v4_flash_atomic_constraints_73_json",
-      "model": "opencode-go/deepseek-v4-flash",
+      "run_id": "pilot_qwen3_6_plus_atomic_constraints_73_json",
+      "model": "opencode-go/qwen3.6-plus",
       "max_tokens": 8192,
       "context_strategy": "atomic_constraints_73_json",
       "docker": {
@@ -56,8 +56,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_minimax_m2_5_no_constraints",
-      "model": "opencode-go/minimax-m2.5",
+      "run_id": "pilot_minimax_m2_7_no_constraints",
+      "model": "opencode-go/minimax-m2.7",
       "max_tokens": 8192,
       "context_strategy": "no_constraints",
       "docker": {
@@ -68,8 +68,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_minimax_m2_5_api_conventions_md",
-      "model": "opencode-go/minimax-m2.5",
+      "run_id": "pilot_minimax_m2_7_api_conventions_md",
+      "model": "opencode-go/minimax-m2.7",
       "max_tokens": 8192,
       "context_strategy": "api_conventions_md",
       "docker": {
@@ -87,8 +87,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_minimax_m2_5_atomic_constraints_73_json",
-      "model": "opencode-go/minimax-m2.5",
+      "run_id": "pilot_minimax_m2_7_atomic_constraints_73_json",
+      "model": "opencode-go/minimax-m2.7",
       "max_tokens": 8192,
       "context_strategy": "atomic_constraints_73_json",
       "docker": {
@@ -106,8 +106,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_kimi_k2_6_no_constraints",
-      "model": "opencode-go/kimi-k2.6",
+      "run_id": "pilot_kimi_k2_5_no_constraints",
+      "model": "opencode-go/kimi-k2.5",
       "max_tokens": 8192,
       "context_strategy": "no_constraints",
       "docker": {
@@ -118,8 +118,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_kimi_k2_6_api_conventions_md",
-      "model": "opencode-go/kimi-k2.6",
+      "run_id": "pilot_kimi_k2_5_api_conventions_md",
+      "model": "opencode-go/kimi-k2.5",
       "max_tokens": 8192,
       "context_strategy": "api_conventions_md",
       "docker": {
@@ -137,8 +137,8 @@
       "skip_existing": true
     },
     {
-      "run_id": "pilot_kimi_k2_6_atomic_constraints_73_json",
-      "model": "opencode-go/kimi-k2.6",
+      "run_id": "pilot_kimi_k2_5_atomic_constraints_73_json",
+      "model": "opencode-go/kimi-k2.5",
       "max_tokens": 8192,
       "context_strategy": "atomic_constraints_73_json",
       "docker": {
@@ -157,13 +157,12 @@
     }
   ],
   "judge_config": {
-    "model": "kimi-k2-thinking",
+    "model": "sonnet",
     "max_tokens": 1024,
     "system_prompt": "You are an impartial judge evaluating whether a code patch newly satisfies a single atomic Kubernetes API convention rule. Respond strictly with a JSON object containing `verdict` (compliant | violated | not_applicable), `patch_effect` (applied_by_patch | already_satisfied | not_relevant | unknown), `confidence` (0..1), and `rationale`.",
     "client": {
-      "client_type": "openai_compatible",
-      "api_key_env": "OPENCODE_API_KEY",
-      "base_url": "https://opencode.ai/zen/go/v1"
+      "client_type": "claude_cli",
+      "command": "claude"
     },
     "judge_mode": "reference_based"
   }
