@@ -10,6 +10,7 @@ class ClientType(enum.StrEnum):
     """Transport dialect for a completion provider."""
 
     ANTHROPIC = "anthropic"
+    CLAUDE_CLI = "claude_cli"
     OPENAI_COMPATIBLE = "openai_compatible"
 
 
@@ -17,8 +18,9 @@ class ClientSpec(base.FrozenModel):
     """Configuration describing how to instantiate a completion client."""
 
     client_type: ClientType
-    api_key_env: str
+    api_key_env: str | None = None
     base_url: str | None = None
+    command: str = "claude"
 
     @pydantic.field_validator("client_type", mode="before")
     @classmethod

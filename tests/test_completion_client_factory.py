@@ -43,6 +43,19 @@ def test_factory_builds_openai_compatible_client(mocker: MockerFixture) -> None:
     )
 
 
+def test_factory_builds_claude_cli_client_without_api_key(mocker: MockerFixture) -> None:
+    mock_claude = mocker.patch("completion_client_factory.claude_cli_client.ClaudeCliCompletionClient")
+    _ = mocker.patch.dict("os.environ", {}, clear=True)
+
+    spec = client_spec.ClientSpec(
+        client_type=client_spec.ClientType.CLAUDE_CLI,
+        command="claude",
+    )
+    _ = completion_client_factory.build_completion_client(spec)
+
+    mock_claude.assert_called_once_with(command="claude")
+
+
 def test_factory_raises_when_env_var_missing(mocker: MockerFixture) -> None:
     _ = mocker.patch.dict("os.environ", {}, clear=True)
     spec = client_spec.ClientSpec(
