@@ -24,18 +24,35 @@ logger = logging.getLogger(__name__)
 
 
 class JudgeVerdict(enum.StrEnum):
-    """Verdict emitted by the LLM judge for a single atomic constraint."""
+    """Verdict emitted by the LLM judge for a single atomic constraint.
+
+    `NOT_JUDGED` is the placeholder used when the judgment never produced a
+    real verdict (e.g., parse / API / verification failure). Keeping the
+    failure mode out of `NOT_APPLICABLE` lets summaries separate genuine
+    "rule does not apply" answers from upstream failures.
+    """
 
     COMPLIANT = "compliant"
     VIOLATED = "violated"
     NOT_APPLICABLE = "not_applicable"
+    NOT_JUDGED = "not_judged"
 
 
 class PatchEffect(enum.StrEnum):
-    """Whether the predicted patch is responsible for satisfying the constraint."""
+    """Whether the predicted patch is responsible for satisfying the constraint.
+
+    `NOT_APPLICABLE` covers verdicts whose constraint either does not apply
+    (`verdict=not_applicable`) or is still violated (`verdict=violated`); both
+    cases share that the patch effect is not meaningful. `NOT_JUDGED` is the
+    placeholder used when the judgment itself never completed. `NOT_RELEVANT`
+    is kept only for backward-compatible parsing of historical responses; it
+    is normalized to `NOT_APPLICABLE` before storage.
+    """
 
     APPLIED_BY_PATCH = "applied_by_patch"
     ALREADY_SATISFIED = "already_satisfied"
+    NOT_APPLICABLE = "not_applicable"
+    NOT_JUDGED = "not_judged"
     NOT_RELEVANT = "not_relevant"
     UNKNOWN = "unknown"
 
@@ -90,14 +107,20 @@ class PatchVerification(enum.StrEnum):
 
 
 class ConstraintJudgment(base.FrozenModel):
-    """Per-constraint judgment result."""
+    """Per-constraint judgment result.
+
+    Fields are ordered so the JSON dump puts pipeline metadata
+    (`constraint_id`, `status`) first, the LLM-produced answer
+    (`verdict`, `patch_effect`) next, and the supporting metrics
+    (`confidence`, `rationale`) last.
+    """
 
     constraint_id: str
-    verdict: JudgeVerdict
-    confidence: float
-    rationale: str
     status: JudgmentStatus = JudgmentStatus.OK
-    patch_effect: PatchEffect = PatchEffect.UNKNOWN
+    verdict: JudgeVerdict = JudgeVerdict.NOT_JUDGED
+    patch_effect: PatchEffect = PatchEffect.NOT_JUDGED
+    confidence: float = 0.0
+    rationale: str = ""
 
     @pydantic.field_validator("verdict", mode="before")
     @classmethod
@@ -117,8 +140,38 @@ class ConstraintJudgment(base.FrozenModel):
     @classmethod
     def validate_patch_effect(cls, value: object) -> object:
         if isinstance(value, str):
-            return PatchEffect(value)
+            normalized = PatchEffect.NOT_APPLICABLE if value == PatchEffect.NOT_RELEVANT else PatchEffect(value)
+            return normalized
+        if value is PatchEffect.NOT_RELEVANT:
+            return PatchEffect.NOT_APPLICABLE
         return value
+
+    @pydantic.model_validator(mode="after")
+    def normalize_judgment(self) -> ConstraintJudgment:
+        if self.status != JudgmentStatus.OK:
+            target_verdict = JudgeVerdict.NOT_JUDGED
+            target_patch_effect = PatchEffect.NOT_JUDGED
+            target_confidence = 0.0
+        elif self.verdict == JudgeVerdict.COMPLIANT:
+            target_verdict = self.verdict
+            target_patch_effect = (
+                self.patch_effect if self.patch_effect in _COMPLIANT_PATCH_EFFECTS else PatchEffect.UNKNOWN
+            )
+            target_confidence = self.confidence
+        else:
+            target_verdict = self.verdict
+            target_patch_effect = PatchEffect.NOT_APPLICABLE
+            target_confidence = self.confidence
+        if (
+            self.verdict == target_verdict
+            and self.patch_effect == target_patch_effect
+            and self.confidence == target_confidence
+        ):
+            return self
+        object.__setattr__(self, "verdict", target_verdict)
+        object.__setattr__(self, "patch_effect", target_patch_effect)
+        object.__setattr__(self, "confidence", target_confidence)
+        return self
 
 
 class InstanceJudgment(base.FrozenModel):
@@ -199,7 +252,7 @@ DEFAULT_JUDGE_SYSTEM_PROMPT = (
     "You are an impartial judge evaluating whether a code patch complies with a single "
     "atomic Kubernetes API convention rule. Respond strictly with a JSON object containing "
     "`verdict` (compliant | violated | not_applicable), "
-    "`patch_effect` (applied_by_patch | already_satisfied | not_relevant | unknown), "
+    "`patch_effect` (applied_by_patch | already_satisfied | not_applicable | unknown), "
     "`confidence` (0..1), and `rationale`."
 )
 
@@ -269,22 +322,32 @@ def parse_judge_response(response: str, constraint_id: str) -> ConstraintJudgmen
 
     Returns `status=PARSE_FAILURE` when the response cannot be parsed so the
     pipeline can keep running and the failure is visible in summaries
-    distinct from genuine `not_applicable` verdicts.
+    distinct from genuine `not_applicable` verdicts. Verdict / patch_effect
+    consistency (e.g., a non-compliant verdict implies `not_applicable`) is
+    enforced by `ConstraintJudgment.normalize_judgment`.
     """
     payload = _extract_json_payload(response)
     if payload is None:
         return _failure_judgment(constraint_id, JudgmentStatus.PARSE_FAILURE, "Unparseable response.")
     try:
         document: dict[str, Any] = json.loads(payload)
+        verdict = JudgeVerdict(document["verdict"])
+        if verdict == JudgeVerdict.NOT_JUDGED:
+            return _failure_judgment(constraint_id, JudgmentStatus.PARSE_FAILURE, "Verdict not_judged is reserved.")
         return ConstraintJudgment(
             constraint_id=constraint_id,
-            verdict=JudgeVerdict(document["verdict"]),
+            verdict=verdict,
             confidence=float(document.get("confidence", 0.0)),
             rationale=str(document.get("rationale", "")),
             patch_effect=PatchEffect(document.get("patch_effect", PatchEffect.UNKNOWN.value)),
         )
     except ValueError, KeyError, pydantic.ValidationError:
         return _failure_judgment(constraint_id, JudgmentStatus.PARSE_FAILURE, "Malformed judge JSON.")
+
+
+_COMPLIANT_PATCH_EFFECTS: frozenset[PatchEffect] = frozenset(
+    {PatchEffect.APPLIED_BY_PATCH, PatchEffect.ALREADY_SATISFIED, PatchEffect.UNKNOWN},
+)
 
 
 def judge_instance(
@@ -557,10 +620,11 @@ def _extract_json_payload(response: str) -> str | None:
 def _failure_judgment(constraint_id: str, status: JudgmentStatus, rationale: str) -> ConstraintJudgment:
     return ConstraintJudgment(
         constraint_id=constraint_id,
-        verdict=JudgeVerdict.NOT_APPLICABLE,
+        status=status,
+        verdict=JudgeVerdict.NOT_JUDGED,
+        patch_effect=PatchEffect.NOT_JUDGED,
         confidence=0.0,
         rationale=rationale,
-        status=status,
     )
 
 

@@ -153,8 +153,89 @@ def test_parse_judge_response_supports_bare_json_without_fence() -> None:
     judgment = judge.parse_judge_response(response, constraint_id="atom_001")
 
     assert judgment.verdict == judge.JudgeVerdict.VIOLATED
-    assert judgment.patch_effect == judge.PatchEffect.NOT_RELEVANT
+    assert judgment.patch_effect == judge.PatchEffect.NOT_APPLICABLE
     assert judgment.rationale == "Missing kind field."
+
+
+def test_parse_judge_response_normalizes_not_relevant_to_not_applicable() -> None:
+    response = '{"verdict": "violated", "patch_effect": "not_relevant", "confidence": 0.5, "rationale": ""}'
+
+    judgment = judge.parse_judge_response(response, constraint_id="atom_001")
+
+    assert judgment.patch_effect == judge.PatchEffect.NOT_APPLICABLE
+
+
+def test_parse_judge_response_forces_compliant_with_unknown_patch_effect_when_not_applicable_provided() -> None:
+    response = (
+        '{"verdict": "compliant", "patch_effect": "not_applicable", '
+        '"confidence": 0.6, "rationale": "compliant but effect unclear"}'
+    )
+
+    judgment = judge.parse_judge_response(response, constraint_id="atom_001")
+
+    assert judgment.verdict == judge.JudgeVerdict.COMPLIANT
+    assert judgment.patch_effect == judge.PatchEffect.UNKNOWN
+
+
+def test_parse_judge_response_rejects_reserved_not_judged_verdict() -> None:
+    response = '{"verdict": "not_judged", "confidence": 0.0, "rationale": ""}'
+
+    judgment = judge.parse_judge_response(response, constraint_id="atom_001")
+
+    assert judgment.status == judge.JudgmentStatus.PARSE_FAILURE
+    assert judgment.verdict == judge.JudgeVerdict.NOT_JUDGED
+    assert judgment.patch_effect == judge.PatchEffect.NOT_JUDGED
+
+
+def test_failure_judgment_uses_not_judged_placeholders_for_verdict_and_patch_effect() -> None:
+    judgment = judge._failure_judgment(  # type: ignore[attr-defined]
+        "atom_001",
+        judge.JudgmentStatus.API_FAILURE,
+        "boom",
+    )
+
+    assert judgment.verdict == judge.JudgeVerdict.NOT_JUDGED
+    assert judgment.patch_effect == judge.PatchEffect.NOT_JUDGED
+    assert judgment.confidence == 0.0
+    assert judgment.rationale == "boom"
+
+
+def test_constraint_judgment_normalizes_legacy_failure_with_not_applicable_verdict() -> None:
+    judgment = judge.ConstraintJudgment(
+        constraint_id="atom_001",
+        status=judge.JudgmentStatus.PARSE_FAILURE,
+        verdict=judge.JudgeVerdict.NOT_APPLICABLE,
+        confidence=0.4,
+        rationale="legacy",
+    )
+
+    assert judgment.verdict == judge.JudgeVerdict.NOT_JUDGED
+    assert judgment.patch_effect == judge.PatchEffect.NOT_JUDGED
+    assert judgment.confidence == 0.0
+
+
+def test_constraint_judgment_violated_forces_patch_effect_to_not_applicable() -> None:
+    judgment = judge.ConstraintJudgment(
+        constraint_id="atom_001",
+        verdict=judge.JudgeVerdict.VIOLATED,
+        rationale="rule broken",
+    )
+
+    assert judgment.patch_effect == judge.PatchEffect.NOT_APPLICABLE
+
+
+def test_constraint_judgment_field_dump_order_starts_with_constraint_id_and_status() -> None:
+    judgment = judge.ConstraintJudgment(
+        constraint_id="atom_001",
+        verdict=judge.JudgeVerdict.COMPLIANT,
+        confidence=0.9,
+        rationale="ok",
+        patch_effect=judge.PatchEffect.APPLIED_BY_PATCH,
+    )
+
+    keys = tuple(judgment.model_dump(mode="json").keys())
+
+    assert keys == ("constraint_id", "status", "verdict", "patch_effect", "confidence", "rationale")
 
 
 def test_parse_judge_response_defaults_patch_effect_to_unknown_for_old_responses() -> None:
@@ -813,14 +894,14 @@ def test_newly_satisfied_rate_counts_only_constraints_applied_by_patch() -> None
                     verdict=judge.JudgeVerdict.VIOLATED,
                     confidence=1.0,
                     rationale="still violated",
-                    patch_effect=judge.PatchEffect.NOT_RELEVANT,
+                    patch_effect=judge.PatchEffect.NOT_APPLICABLE,
                 ),
                 judge.ConstraintJudgment(
                     constraint_id="c4",
                     verdict=judge.JudgeVerdict.NOT_APPLICABLE,
                     confidence=1.0,
                     rationale="outside scope",
-                    patch_effect=judge.PatchEffect.NOT_RELEVANT,
+                    patch_effect=judge.PatchEffect.NOT_APPLICABLE,
                 ),
             ),
         ),
