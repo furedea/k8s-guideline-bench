@@ -468,6 +468,165 @@ def test_judge_instance_skip_existing_returns_existing_judgments_without_calling
     assert result.judgments[0].rationale == "cached"
 
 
+def test_judge_instance_skip_existing_reruns_non_ok_constraints_and_keeps_ok(
+    tmp_path: Path,
+) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    results_root = tmp_path / "results"
+    output_dir = results_root / "run-001" / "42"
+    output_dir.mkdir(parents=True)
+    preexisting = judge.InstanceJudgment(
+        instance_id="42",
+        run_id="run-001",
+        judgments=(
+            judge.ConstraintJudgment(
+                constraint_id="atom_001",
+                verdict=judge.JudgeVerdict.COMPLIANT,
+                confidence=0.9,
+                rationale="cached-ok",
+            ),
+            judge.ConstraintJudgment(
+                constraint_id="atom_002",
+                status=judge.JudgmentStatus.API_FAILURE,
+                confidence=0.0,
+                rationale="prior api failure",
+            ),
+        ),
+    )
+    _ = (output_dir / "judgments.json").write_text(
+        json.dumps(preexisting.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    stub_client = _stub_client_with_counter()
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        skip_existing=True,
+    )
+
+    result = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=stub_client,
+        config=config,
+        run_id="run-001",
+        results_root=results_root,
+    )
+
+    assert stub_client.call_count == 1
+    by_id = {j.constraint_id: j for j in result.judgments}
+    assert by_id["atom_001"].rationale == "cached-ok"
+    assert by_id["atom_002"].verdict == judge.JudgeVerdict.COMPLIANT
+    assert by_id["atom_002"].rationale == "ok"
+
+
+def test_judge_instance_skip_existing_consults_partial_checkpoint_for_ok_constraints(
+    tmp_path: Path,
+) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    results_root = tmp_path / "results"
+    output_dir = results_root / "run-001" / "42"
+    output_dir.mkdir(parents=True)
+    partial_payload = {
+        "judgments": [
+            judge.ConstraintJudgment(
+                constraint_id="atom_001",
+                verdict=judge.JudgeVerdict.VIOLATED,
+                confidence=0.5,
+                rationale="from-partial",
+            ).model_dump(mode="json"),
+        ],
+    }
+    _ = (output_dir / "judgments.partial.json").write_text(
+        json.dumps(partial_payload),
+        encoding="utf-8",
+    )
+    stub_client = _stub_client_with_counter()
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        skip_existing=True,
+    )
+
+    result = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=stub_client,
+        config=config,
+        run_id="run-001",
+        results_root=results_root,
+    )
+
+    assert stub_client.call_count == 1
+    by_id = {j.constraint_id: j for j in result.judgments}
+    assert by_id["atom_001"].rationale == "from-partial"
+    assert by_id["atom_002"].verdict == judge.JudgeVerdict.COMPLIANT
+
+
+def test_judge_instance_writes_partial_checkpoint_after_each_ok_constraint(tmp_path: Path) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    seen_partial_sizes: list[int] = []
+    seen_partial_lock = threading.Lock()
+    partial_path = tmp_path / "results" / "run-001" / "42" / "judgments.partial.json"
+
+    def record_partial_size() -> None:
+        try:
+            document = json.loads(partial_path.read_text(encoding="utf-8"))
+            with seen_partial_lock:
+                seen_partial_sizes.append(len(document["judgments"]))
+        except FileNotFoundError:
+            with seen_partial_lock:
+                seen_partial_sizes.append(0)
+
+    class ObservingClient:
+        def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+            _ = system, model, max_tokens
+            constraint_id = _constraint_id_from_prompt(user)
+            record_partial_size()
+            return f'{{"verdict": "compliant", "confidence": 0.7, "rationale": "judged {constraint_id}"}}'
+
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        max_workers=1,
+    )
+
+    _ = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=ObservingClient(),
+        config=config,
+        run_id="run-001",
+        results_root=tmp_path / "results",
+    )
+
+    assert seen_partial_sizes == [0, 1]
+
+
 def test_judge_instance_skip_existing_false_overwrites_existing_judgments(
     tmp_path: Path,
 ) -> None:

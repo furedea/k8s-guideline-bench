@@ -3,10 +3,12 @@
 import enum
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -363,18 +365,54 @@ def judge_instance(
     """Evaluate a single dataset instance against every atomic constraint.
 
     `run_id` scopes where judgments are persisted (alongside the agent run that
-    produced `predicted_patch`), separate from judge-model configuration.
-    When `config.skip_existing` is true and a previous `judgments.json` is on
-    disk, return that result without calling the LLM. Re-judging therefore
-    requires either disabling the flag or removing the file.
+    produced `predicted_patch`), separate from judge-model configuration. When
+    `config.skip_existing` is true the completed (`status=OK`) judgments from
+    `judgments.json` and `judgments.partial.json` are reused per constraint;
+    every constraint without an `OK` entry is re-judged. Each successful
+    constraint is checkpointed to `judgments.partial.json` so an interrupted
+    run can resume without redoing finished work.
     """
     instance_id = str(instance.detail.pr_number)
-    if config.skip_existing:
-        cached = _load_existing_judgment(results_root, run_id, instance_id)
-        if cached is not None:
-            return cached
     selected = _select_constraints(constraints, config.judge_target_selection)
+    completed = _load_completed_judgments(results_root, run_id, instance_id) if config.skip_existing else {}
+    pending = tuple(constraint for constraint in selected if constraint.id not in completed)
+    if not pending:
+        return _finalize_instance_judgment(
+            results_root,
+            run_id,
+            instance_id,
+            tuple(completed[constraint.id] for constraint in selected),
+        )
     _persist_judge_targets(results_root, run_id, instance_id, selected, config.judge_target_selection)
+    new_judgments = _judge_pending_constraints(
+        instance=instance,
+        predicted_patch=predicted_patch,
+        gold_patch=gold_patch,
+        pending=pending,
+        client=client,
+        config=config,
+        run_id=run_id,
+        instance_id=instance_id,
+        results_root=results_root,
+        completed=completed,
+    )
+    merged = _merge_judgments(selected, completed, new_judgments)
+    return _finalize_instance_judgment(results_root, run_id, instance_id, merged)
+
+
+def _judge_pending_constraints(
+    *,
+    instance: dataset_builder.DatasetInstance,
+    predicted_patch: str,
+    gold_patch: str,
+    pending: tuple[atomic_constraint.AtomicConstraint, ...],
+    client: completion_client.CompletionClient,
+    config: JudgeConfig,
+    run_id: str,
+    instance_id: str,
+    results_root: Path,
+    completed: dict[str, ConstraintJudgment],
+) -> tuple[ConstraintJudgment, ...]:
     verification_failure = _verify_patch(
         instance,
         predicted_patch,
@@ -382,26 +420,51 @@ def judge_instance(
         config.verification_timeout_seconds,
     )
     if verification_failure is not None:
-        judgments = tuple(
+        return tuple(
             _failure_judgment(constraint.id, verification_failure.status, verification_failure.rationale)
-            for constraint in selected
+            for constraint in pending
         )
-    else:
-        judgments = _judge_constraints_parallel(
-            instance,
-            predicted_patch,
-            gold_patch,
-            selected,
-            client,
-            config,
-            run_id,
-            instance_id,
-        )
-    result = InstanceJudgment(
+    checkpoint = _PartialCheckpoint(
+        path=_partial_judgments_path(results_root, run_id, instance_id),
         instance_id=instance_id,
         run_id=run_id,
-        judgments=judgments,
+        seed=completed,
     )
+    return _judge_constraints_parallel(
+        instance,
+        predicted_patch,
+        gold_patch,
+        pending,
+        client,
+        config,
+        run_id,
+        instance_id,
+        checkpoint=checkpoint,
+    )
+
+
+def _merge_judgments(
+    selected: tuple[atomic_constraint.AtomicConstraint, ...],
+    completed: dict[str, ConstraintJudgment],
+    new_judgments: tuple[ConstraintJudgment, ...],
+) -> tuple[ConstraintJudgment, ...]:
+    new_by_id = {judgment.constraint_id: judgment for judgment in new_judgments}
+    merged: list[ConstraintJudgment] = []
+    for constraint in selected:
+        if constraint.id in new_by_id:
+            merged.append(new_by_id[constraint.id])
+        else:
+            merged.append(completed[constraint.id])
+    return tuple(merged)
+
+
+def _finalize_instance_judgment(
+    results_root: Path,
+    run_id: str,
+    instance_id: str,
+    judgments: tuple[ConstraintJudgment, ...],
+) -> InstanceJudgment:
+    result = InstanceJudgment(instance_id=instance_id, run_id=run_id, judgments=judgments)
     _persist_instance_judgment(result, results_root)
     return result
 
@@ -450,6 +513,49 @@ def _is_newly_satisfied(judgment: ConstraintJudgment) -> bool:
     return judgment.verdict == JudgeVerdict.COMPLIANT and judgment.patch_effect == PatchEffect.APPLIED_BY_PATCH
 
 
+class _PartialCheckpoint:
+    """Thread-safe writer for `judgments.partial.json` that preserves OK results.
+
+    Only `status=JudgmentStatus.OK` constraints are recorded so an
+    interrupted run resumes from clean, reusable state without dragging
+    transient API / parse failures forward.
+    """
+
+    __slots__ = ("_completed", "_instance_id", "_lock", "_path", "_run_id")
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        instance_id: str,
+        run_id: str,
+        seed: dict[str, ConstraintJudgment],
+    ) -> None:
+        self._lock = threading.Lock()
+        self._path = path
+        self._instance_id = instance_id
+        self._run_id = run_id
+        self._completed: dict[str, ConstraintJudgment] = {
+            constraint_id: judgment for constraint_id, judgment in seed.items() if judgment.status == JudgmentStatus.OK
+        }
+
+    def record(self, judgment: ConstraintJudgment) -> None:
+        if judgment.status != JudgmentStatus.OK:
+            return
+        with self._lock:
+            self._completed[judgment.constraint_id] = judgment
+            self._flush_locked()
+
+    def _flush_locked(self) -> None:
+        ordered_ids = sorted(self._completed)
+        document = {
+            "instance_id": self._instance_id,
+            "run_id": self._run_id,
+            "judgments": [self._completed[constraint_id].model_dump(mode="json") for constraint_id in ordered_ids],
+        }
+        _atomic_write_json(self._path, document)
+
+
 def _judge_single_constraint(
     instance: dataset_builder.DatasetInstance,
     constraint: atomic_constraint.AtomicConstraint,
@@ -496,6 +602,8 @@ def _judge_constraints_parallel(
     config: JudgeConfig,
     run_id: str,
     instance_id: str,
+    *,
+    checkpoint: _PartialCheckpoint | None = None,
 ) -> tuple[ConstraintJudgment, ...]:
     workers = max(config.max_workers, 1)
     if workers == 1:
@@ -506,10 +614,13 @@ def _judge_constraints_parallel(
             ncols=88,
             leave=False,
         )
-        return tuple(
-            _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
-            for constraint in progress
-        )
+        judgments_list: list[ConstraintJudgment] = []
+        for constraint in progress:
+            judgment = _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
+            judgments_list.append(judgment)
+            if checkpoint is not None:
+                checkpoint.record(judgment)
+        return tuple(judgments_list)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_constraint = {
             executor.submit(
@@ -531,16 +642,26 @@ def _judge_constraints_parallel(
             ncols=88,
             leave=False,
         )
-        judgments_list = [future.result() for future in progress]
+        judgments_list = []
+        for future in progress:
+            judgment = future.result()
+            judgments_list.append(judgment)
+            if checkpoint is not None:
+                checkpoint.record(judgment)
     judgments_list.sort(key=lambda j: j.constraint_id)
     return tuple(judgments_list)
 
 
 _INSTANCE_JUDGMENT_ADAPTER = pydantic.TypeAdapter(InstanceJudgment)
+_CONSTRAINT_JUDGMENT_ADAPTER = pydantic.TypeAdapter(ConstraintJudgment)
 
 
 def _judgments_path(results_root: Path, run_id: str, instance_id: str) -> Path:
     return results_root / run_id / instance_id / "judgments.json"
+
+
+def _partial_judgments_path(results_root: Path, run_id: str, instance_id: str) -> Path:
+    return results_root / run_id / instance_id / "judgments.partial.json"
 
 
 def _judge_targets_path(results_root: Path, run_id: str, instance_id: str) -> Path:
@@ -591,20 +712,57 @@ def _write_json(path: Path, document: object) -> None:
     )
 
 
-def _load_existing_judgment(
+def _atomic_write_json(path: Path, document: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(document, indent=2, ensure_ascii=False)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            _ = handle.write(serialized)
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _load_completed_judgments(
     results_root: Path,
     run_id: str,
     instance_id: str,
-) -> InstanceJudgment | None:
-    path = _judgments_path(results_root, run_id, instance_id)
+) -> dict[str, ConstraintJudgment]:
+    """Return ok-only judgments keyed by constraint_id from final and partial files.
+
+    Both `judgments.json` and `judgments.partial.json` are scanned. When the
+    same constraint appears in both, the entry from `judgments.json` wins
+    because it was committed at the end of a complete run.
+    """
+    completed: dict[str, ConstraintJudgment] = {}
+    for path in (
+        _partial_judgments_path(results_root, run_id, instance_id),
+        _judgments_path(results_root, run_id, instance_id),
+    ):
+        for judgment in _read_constraint_judgments(path):
+            if judgment.status == JudgmentStatus.OK:
+                completed[judgment.constraint_id] = judgment
+    return completed
+
+
+def _read_constraint_judgments(path: Path) -> tuple[ConstraintJudgment, ...]:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError, json.JSONDecodeError:
-        return None
-    try:
-        return _INSTANCE_JUDGMENT_ADAPTER.validate_python(document)
-    except pydantic.ValidationError:
-        return None
+        return ()
+    raw_judgments = document.get("judgments") if isinstance(document, dict) else document
+    if not isinstance(raw_judgments, list):
+        return ()
+    parsed: list[ConstraintJudgment] = []
+    for raw in raw_judgments:
+        try:
+            parsed.append(_CONSTRAINT_JUDGMENT_ADAPTER.validate_python(raw))
+        except pydantic.ValidationError:
+            continue
+    return tuple(parsed)
 
 
 def _extract_json_payload(response: str) -> str | None:
