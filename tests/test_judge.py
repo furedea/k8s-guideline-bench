@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import threading
 from pathlib import Path
 
 import atomic_constraint
@@ -33,6 +34,19 @@ def _constraint() -> atomic_constraint.AtomicConstraint:
         rule="All JSON objects include a kind field.",
         rationale="Consistency",
         judgeability=atomic_constraint.Judgeability.MACHINE_CHECKABLE,
+    )
+
+
+def _constraint_with_id(constraint_id: str) -> atomic_constraint.AtomicConstraint:
+    return atomic_constraint.AtomicConstraint(
+        id=constraint_id,
+        normative_source_ids=("norm_014",),
+        source_path=Path("docs/source/api-conventions.md"),
+        source_span="219-219",
+        title="Kind field",
+        rule="All JSON objects include a kind field.",
+        rationale="Consistency",
+        judgeability=atomic_constraint.Judgeability.LLM_CHECKABLE,
     )
 
 
@@ -256,6 +270,58 @@ def test_judge_instance_collects_judgments_and_persists_result(tmp_path: Path) -
     output_path = results_root / "run-001" / "42" / "judgments.json"
     document = json.loads(output_path.read_text(encoding="utf-8"))
     assert document["judgments"][0]["verdict"] == "compliant"
+
+
+def test_judge_instance_evaluates_constraints_concurrently_when_max_workers_allows_it(tmp_path: Path) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    both_calls_started = threading.Barrier(parties=2, timeout=1.0)
+    seen_constraint_ids: list[str] = []
+    seen_constraint_ids_lock = threading.Lock()
+
+    class ConcurrentClient:
+        def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+            _ = system, model, max_tokens
+            constraint_id = _constraint_id_from_prompt(user)
+            with seen_constraint_ids_lock:
+                seen_constraint_ids.append(constraint_id)
+            both_calls_started.wait()
+            return f'{{"verdict": "compliant", "confidence": 0.7, "rationale": "judged {constraint_id}"}}'
+
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        max_workers=2,
+    )
+
+    result = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=ConcurrentClient(),
+        config=config,
+        run_id="run-001",
+        results_root=tmp_path / "results",
+    )
+
+    assert sorted(seen_constraint_ids) == ["atom_001", "atom_002"]
+    assert {judgment.rationale for judgment in result.judgments} == {
+        "judged atom_001",
+        "judged atom_002",
+    }
+
+
+def _constraint_id_from_prompt(prompt: str) -> str:
+    for line in prompt.splitlines():
+        if line.startswith("- id:"):
+            return line.split(":", 1)[1].strip()
+    raise AssertionError("Prompt did not include a constraint id.")
 
 
 class _CountingStubClient:
