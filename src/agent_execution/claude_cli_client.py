@@ -3,6 +3,25 @@
 import subprocess
 
 
+class ClaudeCliFatalError(RuntimeError):
+    """`claude -p` exited with a non-zero status.
+
+    Treated as fatal because retrying after auth, quota, or model-config
+    failures would amplify the same error and burn quota; the run should
+    surface the diagnosis (returncode + stdout/stderr) and stop. The user
+    prompt is intentionally excluded from the message so failure logs
+    cannot leak the patch under judgment.
+    """
+
+    __slots__ = ("returncode", "stderr", "stdout")
+
+    def __init__(self, *, returncode: int, stdout: str, stderr: str) -> None:
+        super().__init__(f"claude CLI exited with returncode={returncode}")
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
 class ClaudeCliCompletionClient:
     """Invoke `claude -p` for single-turn judge completions."""
 
@@ -27,6 +46,12 @@ class ClaudeCliCompletionClient:
             ],
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
         )
+        if result.returncode != 0:
+            raise ClaudeCliFatalError(
+                returncode=result.returncode,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
         return result.stdout
