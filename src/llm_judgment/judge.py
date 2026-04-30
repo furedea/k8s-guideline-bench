@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -145,6 +146,7 @@ class JudgeConfig(base.FrozenModel):
     judge_mode: JudgeMode = JudgeMode.REFERENCE_BASED
     skip_existing: bool = False
     max_retries: int = 0
+    max_workers: int = 4
     judge_target_selection: JudgeTargetSelection = JudgeTargetSelection.ALL_CONSTRAINTS
     patch_verification: PatchVerification = PatchVerification.NONE
     verification_timeout_seconds: float = 300.0
@@ -322,16 +324,15 @@ def judge_instance(
             for constraint in selected
         )
     else:
-        progress = tqdm.tqdm(
+        judgments = _judge_constraints_parallel(
+            instance,
+            predicted_patch,
+            gold_patch,
             selected,
-            desc=f"judge[{run_id}/{instance_id}]",
-            unit="rule",
-            ncols=88,
-            leave=False,
-        )
-        judgments = tuple(
-            _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
-            for constraint in progress
+            client,
+            config,
+            run_id,
+            instance_id,
         )
     result = InstanceJudgment(
         instance_id=instance_id,
@@ -421,6 +422,55 @@ def _judge_single_constraint(
         JudgmentStatus.API_FAILURE,
         f"Judge API failure: {last_error}",
     )
+
+
+def _judge_constraints_parallel(
+    instance: dataset_builder.DatasetInstance,
+    predicted_patch: str,
+    gold_patch: str,
+    selected: tuple[atomic_constraint.AtomicConstraint, ...],
+    client: completion_client.CompletionClient,
+    config: JudgeConfig,
+    run_id: str,
+    instance_id: str,
+) -> tuple[ConstraintJudgment, ...]:
+    workers = max(config.max_workers, 1)
+    if workers == 1:
+        progress = tqdm.tqdm(
+            selected,
+            desc=f"judge[{run_id}/{instance_id}]",
+            unit="rule",
+            ncols=88,
+            leave=False,
+        )
+        return tuple(
+            _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
+            for constraint in progress
+        )
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_constraint = {
+            executor.submit(
+                _judge_single_constraint,
+                instance,
+                constraint,
+                predicted_patch,
+                gold_patch,
+                client,
+                config,
+            ): constraint
+            for constraint in selected
+        }
+        progress = tqdm.tqdm(
+            as_completed(future_to_constraint),
+            total=len(selected),
+            desc=f"judge[{run_id}/{instance_id}]",
+            unit="rule",
+            ncols=88,
+            leave=False,
+        )
+        judgments_list = [future.result() for future in progress]
+    judgments_list.sort(key=lambda j: j.constraint_id)
+    return tuple(judgments_list)
 
 
 _INSTANCE_JUDGMENT_ADAPTER = pydantic.TypeAdapter(InstanceJudgment)
