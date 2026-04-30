@@ -15,6 +15,7 @@ from typing import Any
 
 import atomic_constraint
 import base
+import claude_cli_client
 import client_spec
 import completion_client
 import dataset_builder
@@ -439,6 +440,7 @@ def _judge_pending_constraints(
         config,
         run_id,
         instance_id,
+        results_root=results_root,
         checkpoint=checkpoint,
     )
 
@@ -574,6 +576,8 @@ def _judge_single_constraint(
                 model=config.model,
                 max_tokens=config.max_tokens,
             )
+        except claude_cli_client.ClaudeCliFatalError:
+            raise
         except Exception as exc:
             last_error = exc
             continue
@@ -603,6 +607,7 @@ def _judge_constraints_parallel(
     run_id: str,
     instance_id: str,
     *,
+    results_root: Path,
     checkpoint: _PartialCheckpoint | None = None,
 ) -> tuple[ConstraintJudgment, ...]:
     workers = max(config.max_workers, 1)
@@ -616,7 +621,17 @@ def _judge_constraints_parallel(
         )
         judgments_list: list[ConstraintJudgment] = []
         for constraint in progress:
-            judgment = _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
+            try:
+                judgment = _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
+            except claude_cli_client.ClaudeCliFatalError as error:
+                _record_fatal_error(
+                    results_root=results_root,
+                    run_id=run_id,
+                    instance_id=instance_id,
+                    constraint_id=constraint.id,
+                    error=error,
+                )
+                raise
             judgments_list.append(judgment)
             if checkpoint is not None:
                 checkpoint.record(judgment)
@@ -643,13 +658,78 @@ def _judge_constraints_parallel(
             leave=False,
         )
         judgments_list = []
-        for future in progress:
-            judgment = future.result()
-            judgments_list.append(judgment)
-            if checkpoint is not None:
-                checkpoint.record(judgment)
+        try:
+            for future in progress:
+                try:
+                    judgment = future.result()
+                except claude_cli_client.ClaudeCliFatalError as error:
+                    failed_constraint = future_to_constraint[future]
+                    _record_fatal_error(
+                        results_root=results_root,
+                        run_id=run_id,
+                        instance_id=instance_id,
+                        constraint_id=failed_constraint.id,
+                        error=error,
+                    )
+                    raise
+                judgments_list.append(judgment)
+                if checkpoint is not None:
+                    checkpoint.record(judgment)
+        except claude_cli_client.ClaudeCliFatalError:
+            for pending_future in future_to_constraint:
+                _ = pending_future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
     judgments_list.sort(key=lambda j: j.constraint_id)
     return tuple(judgments_list)
+
+
+def _judge_errors_path(results_root: Path, run_id: str, instance_id: str) -> Path:
+    return results_root / run_id / instance_id / "judge_errors.jsonl"
+
+
+def _record_fatal_error(
+    *,
+    results_root: Path,
+    run_id: str,
+    instance_id: str,
+    constraint_id: str,
+    error: claude_cli_client.ClaudeCliFatalError,
+) -> None:
+    """Persist a structured `judge_errors.jsonl` record and log the failure.
+
+    The user prompt is intentionally omitted from both the log and the file so
+    the patch under judgment never leaks into shared diagnostic surfaces.
+    """
+    record = {
+        "run_id": run_id,
+        "instance_id": instance_id,
+        "constraint_id": constraint_id,
+        "returncode": error.returncode,
+        "stdout": _tail(error.stdout),
+        "stderr": _tail(error.stderr),
+    }
+    logger.error(
+        {
+            "action": "judge_claude_cli_fatal",
+            "results_root": str(results_root),
+            **record,
+        }
+    )
+    path = _judge_errors_path(results_root, run_id, instance_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        _ = handle.write(json.dumps(record, ensure_ascii=False))
+        _ = handle.write("\n")
+
+
+_FATAL_ERROR_TAIL_LIMIT = 4096
+
+
+def _tail(text: str) -> str:
+    if len(text) <= _FATAL_ERROR_TAIL_LIMIT:
+        return text
+    return text[-_FATAL_ERROR_TAIL_LIMIT:]
 
 
 _INSTANCE_JUDGMENT_ADAPTER = pydantic.TypeAdapter(InstanceJudgment)

@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 
 import agent_runner
+import claude_cli_client
 import client_spec
 import completion_client
 import dataset_builder
 import experiment
 import judge
 import pr_collection
+import pytest
 from pytest_mock import MockerFixture
 
 
@@ -242,6 +244,27 @@ def test_run_experiment_skips_judge_for_failed_agent_results(
     assert run.summary.total == 1
     assert (spec.results_root / "run-001" / "42" / "judgments.json").exists()
     assert not (spec.results_root / "run-001" / "43" / "judgments.json").exists()
+
+
+def test_run_experiment_propagates_claude_cli_fatal_error_from_judge(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    spec = _make_experiment_spec(tmp_path)
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+    _ = mocker.patch(
+        "agent_runner.run_agent_on_instances",
+        autospec=True,
+        return_value=(agent_runner.AgentRunResult(run_id="run-001", predicted_patch="diff\n"),),
+    )
+    fatal = claude_cli_client.ClaudeCliFatalError(returncode=2, stdout="", stderr="auth required")
+    _ = mocker.patch("judge.judge_instance", side_effect=fatal)
+
+    with pytest.raises(claude_cli_client.ClaudeCliFatalError) as exc_info:
+        _ = experiment.run_experiment(spec, instances, client_factory=_stub_factory)
+
+    assert exc_info.value.returncode == 2
+    assert not (spec.results_root / "experiment_report.json").exists()
 
 
 def test_load_experiment_spec_parses_json(tmp_path: Path) -> None:
