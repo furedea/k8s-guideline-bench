@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     _ = parser.add_argument(
         "--instance-id",
         action="append",
-        default=(),
+        default=None,
         help="Dataset PR number to run. Repeat to run multiple specific instances.",
     )
     _ = parser.add_argument(
@@ -66,7 +66,7 @@ def main() -> None:
 
     instances = _select_instances(
         dataset_store.load_dataset_instances(resolved_spec.datasets_root),
-        instance_ids=tuple(arguments.instance_id),
+        instance_ids=tuple(arguments.instance_id or ()),
         limit=arguments.limit if arguments.limit is not None else resolved_spec.instance_limit,
     )
     report = experiment.run_experiment(
