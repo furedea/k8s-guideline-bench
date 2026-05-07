@@ -31,6 +31,7 @@
       "command": "claude"
     },
     "judge_mode": "reference_based",
+    "max_workers": 8,
     "skip_existing": true
   }
 }
