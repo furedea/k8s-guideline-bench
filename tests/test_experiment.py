@@ -397,6 +397,7 @@ def test_load_experiment_spec_expands_agent_matrix(tmp_path: Path) -> None:
                     "client": {
                         "client_type": "claude_cli",
                     },
+                    "skip_existing": True,
                 },
             },
         ),
@@ -413,6 +414,7 @@ def test_load_experiment_spec_expands_agent_matrix(tmp_path: Path) -> None:
         "pilot_minimax_m2_7_api_conventions_md",
         "pilot_minimax_m2_7_atomic_constraints_73_json",
     )
+    assert loaded.judge_config.skip_existing is True
     api_doc = loaded.agent_configs[1]
     assert api_doc.context_files[0].source_path == Path("docs/source/api-conventions.md")
     assert api_doc.context_files[0].bench_path == "api-conventions.md"

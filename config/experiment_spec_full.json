@@ -30,6 +30,7 @@
       "client_type": "claude_cli",
       "command": "claude"
     },
-    "judge_mode": "reference_based"
+    "judge_mode": "reference_based",
+    "skip_existing": true
   }
 }
