@@ -1,4 +1,5 @@
 .direnv/
+.claude-home/
 result
 result-*
 logs/
