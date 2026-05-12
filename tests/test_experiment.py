@@ -2,8 +2,10 @@
 
 import json
 from pathlib import Path
+from typing import cast
 
 import agent_runner
+import atomic_constraint
 import claude_cli_client
 import client_spec
 import completion_client
@@ -48,6 +50,26 @@ def _write_constraints_file(path: Path) -> None:
                 "rationale": "Consistency",
                 "judgeability": "machine_checkable",
             },
+            {
+                "id": "atom_002",
+                "normative_source_ids": ["norm_015"],
+                "source_path": "docs/source/api-conventions.md",
+                "source_span": "220-220",
+                "title": "Spec field",
+                "rule": "Spec fields should be declarative.",
+                "rationale": "Consistency",
+                "judgeability": "llm_checkable",
+            },
+            {
+                "id": "atom_003",
+                "normative_source_ids": ["norm_016"],
+                "source_path": "docs/source/api-conventions.md",
+                "source_span": "221-221",
+                "title": "Status field",
+                "rule": "Status fields should be observed state.",
+                "rationale": "Consistency",
+                "judgeability": "llm_checkable",
+            },
         ],
     }
     _ = path.write_text(json.dumps(constraints), encoding="utf-8")
@@ -62,6 +84,45 @@ class _StubJudgeClient:
 def _stub_factory(spec: client_spec.ClientSpec) -> completion_client.CompletionClient:
     assert spec.api_key_env == "JUDGE_KEY"
     return _StubJudgeClient()
+
+
+def _write_instance_judgments(
+    results_root: Path,
+    run_id: str,
+    instance_id: str,
+    judgments: tuple[judge.ConstraintJudgment, ...],
+) -> None:
+    instance_dir = results_root / run_id / instance_id
+    instance_dir.mkdir(parents=True)
+    result = judge.InstanceJudgment(
+        instance_id=instance_id,
+        run_id=run_id,
+        judgments=judgments,
+    )
+    _ = (instance_dir / "judgments.json").write_text(
+        json.dumps(result.model_dump(mode="json"), indent=2),
+        encoding="utf-8",
+    )
+
+
+def _compliant_applied(constraint_id: str) -> judge.ConstraintJudgment:
+    return judge.ConstraintJudgment(
+        constraint_id=constraint_id,
+        verdict=judge.JudgeVerdict.COMPLIANT,
+        confidence=0.9,
+        rationale="",
+        patch_effect=judge.PatchEffect.APPLIED_BY_PATCH,
+    )
+
+
+def _compliant_already(constraint_id: str) -> judge.ConstraintJudgment:
+    return judge.ConstraintJudgment(
+        constraint_id=constraint_id,
+        verdict=judge.JudgeVerdict.COMPLIANT,
+        confidence=0.9,
+        rationale="",
+        patch_effect=judge.PatchEffect.ALREADY_SATISFIED,
+    )
 
 
 def _make_experiment_spec(tmp_path: Path) -> experiment.ExperimentSpec:
@@ -119,8 +180,8 @@ def test_run_experiment_executes_agent_and_judge_for_each_instance(
     run = report.runs[0]
     assert run.run_id == "run-001"
     assert run.instance_ids == ("42",)
-    assert run.summary.total == 1
-    assert run.summary.compliant == 1
+    assert run.summary.total == 3
+    assert run.summary.compliant == 3
     assert (spec.results_root / "run-001" / "42" / "judgments.json").exists()
     assert (spec.results_root / "experiment_report.json").exists()
 
@@ -241,9 +302,106 @@ def test_run_experiment_skips_judge_for_failed_agent_results(
     assert run.agent_completed == 1
     assert run.agent_failed == 1
     assert run.agent_skipped == 0
-    assert run.summary.total == 1
+    assert run.summary.total == 3
     assert (spec.results_root / "run-001" / "42" / "judgments.json").exists()
     assert not (spec.results_root / "run-001" / "43" / "judgments.json").exists()
+
+
+def test_run_experiment_with_gold_scope_policy_reuses_full_judgments_in_scoped_run(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    spec = _make_experiment_spec(tmp_path).model_copy(
+        update={"judge_target_policy": experiment.JudgeTargetPolicy.GOLD_SCOPE},
+    )
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+    _write_instance_judgments(
+        spec.results_root,
+        "gold_scope",
+        "42",
+        (
+            _compliant_applied("atom_001"),
+            _compliant_already("atom_002"),
+            _compliant_already("atom_003"),
+        ),
+    )
+    _write_instance_judgments(
+        spec.results_root,
+        "run-001",
+        "42",
+        (
+            _compliant_applied("atom_001"),
+            _compliant_already("atom_002"),
+            _compliant_already("atom_003"),
+        ),
+    )
+    _ = mocker.patch(
+        "agent_runner.run_agent_on_instances",
+        autospec=True,
+        return_value=(agent_runner.AgentRunResult(run_id="run-001", predicted_patch="diff\n"),),
+    )
+    judge_spy = mocker.patch("judge.judge_instance", autospec=True)
+
+    report = experiment.run_experiment(spec, instances, client_factory=_stub_factory)
+
+    judge_spy.assert_not_called()
+    scoped = judge.load_instance_judgments(spec.results_root, "run-001__gold_scope", "42")
+    assert tuple(j.constraint_id for j in scoped) == ("atom_001", "atom_002", "atom_003")
+    assert not (spec.results_root / "run-001__gold_scope" / "42" / "judge_targets.json").exists()
+    run = report.runs[0]
+    assert run.run_id == "run-001"
+    assert run.summary.total == 3
+
+
+def test_run_experiment_with_gold_scope_policy_judges_only_missing_scoped_constraints(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    spec = _make_experiment_spec(tmp_path).model_copy(
+        update={"judge_target_policy": experiment.JudgeTargetPolicy.GOLD_SCOPE},
+    )
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+    _write_instance_judgments(
+        spec.results_root,
+        "gold_scope",
+        "42",
+        (
+            _compliant_applied("atom_001"),
+            _compliant_already("atom_002"),
+        ),
+    )
+    _write_instance_judgments(
+        spec.results_root,
+        "run-001",
+        "42",
+        (_compliant_applied("atom_001"),),
+    )
+    _ = mocker.patch(
+        "agent_runner.run_agent_on_instances",
+        autospec=True,
+        return_value=(agent_runner.AgentRunResult(run_id="run-001", predicted_patch="diff\n"),),
+    )
+
+    def fake_judge_instance(**kwargs: object) -> judge.InstanceJudgment:
+        constraints = kwargs["constraints"]
+        assert isinstance(constraints, tuple)
+        scoped_constraints = cast("tuple[atomic_constraint.AtomicConstraint, ...]", constraints)
+        assert tuple(constraint.id for constraint in scoped_constraints) == ("atom_001", "atom_002")
+        assert kwargs["run_id"] == "run-001__gold_scope"
+        return judge.InstanceJudgment(
+            instance_id="42",
+            run_id="run-001__gold_scope",
+            judgments=(
+                _compliant_applied("atom_001"),
+                _compliant_already("atom_002"),
+            ),
+        )
+
+    judge_spy = mocker.patch("judge.judge_instance", autospec=True, side_effect=fake_judge_instance)
+
+    _ = experiment.run_experiment(spec, instances, client_factory=_stub_factory)
+
+    judge_spy.assert_called_once()
 
 
 def test_run_experiment_propagates_claude_cli_fatal_error_from_judge(
@@ -421,3 +579,69 @@ def test_load_experiment_spec_expands_agent_matrix(tmp_path: Path) -> None:
     atomic = loaded.agent_configs[2]
     assert atomic.context_files[0].source_path == Path("constraints/api_conventions_atomic_constraints_73.json")
     assert atomic.context_files[0].bench_path == "api_conventions_atomic_constraints.json"
+
+
+def test_experiment_spec_defaults_gold_scope_judge_config_to_strategy_judge_with_patch_only_mode(
+    tmp_path: Path,
+) -> None:
+    spec = _make_experiment_spec(tmp_path)
+
+    assert spec.gold_scope_judge_config is not None
+    gold_cfg = spec.gold_scope_judge_config
+
+    assert gold_cfg.model == spec.judge_config.model
+    assert gold_cfg.max_tokens == spec.judge_config.max_tokens
+    assert gold_cfg.system_prompt == spec.judge_config.system_prompt
+    assert gold_cfg.client == spec.judge_config.client
+    assert gold_cfg.judge_mode == judge.JudgeMode.PATCH_ONLY
+
+
+def test_load_experiment_spec_preserves_explicit_gold_scope_judge_config(tmp_path: Path) -> None:
+    spec_path = tmp_path / "experiment.json"
+    _ = spec_path.write_text(
+        json.dumps(
+            {
+                "datasets_root": "datasets",
+                "results_root": "results",
+                "repo_path": "kubernetes",
+                "constraints_file": "constraints.json",
+                "agent_configs": [
+                    {
+                        "run_id": "run-001",
+                        "model": "m",
+                        "max_tokens": 1024,
+                        "context_strategy": "inline_constraints",
+                        "docker": {
+                            "image": "k8s-bench-agent",
+                            "agent_command": 'agent run "$AGENT_PROMPT_PATH"',
+                        },
+                    },
+                ],
+                "judge_config": {
+                    "model": "sonnet",
+                    "max_tokens": 256,
+                    "system_prompt": "judge",
+                    "client": {"client_type": "claude_cli"},
+                },
+                "gold_scope_judge_config": {
+                    "model": "opus",
+                    "max_tokens": 512,
+                    "system_prompt": "gold judge",
+                    "client": {"client_type": "claude_cli"},
+                    "judge_mode": "patch_only",
+                    "max_workers": 4,
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = experiment.load_experiment_spec(spec_path)
+
+    assert loaded.gold_scope_judge_config is not None
+    gold_cfg = loaded.gold_scope_judge_config
+    assert gold_cfg.model == "opus"
+    assert gold_cfg.max_tokens == 512
+    assert gold_cfg.system_prompt == "gold judge"
+    assert gold_cfg.judge_mode == judge.JudgeMode.PATCH_ONLY
+    assert loaded.judge_config.model == "sonnet"

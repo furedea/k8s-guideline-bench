@@ -4,6 +4,7 @@
   "repo_path": "kubernetes",
   "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
   "instance_limit": 10,
+  "judge_target_policy": "gold_scope",
   "agent_matrix": {
     "run_id_prefix": "pilot",
     "models": [
