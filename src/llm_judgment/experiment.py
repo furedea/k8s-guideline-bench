@@ -7,6 +7,7 @@ an `ExperimentSpec` (constraints, result root, agent/judge configs) and a
 """
 
 import datetime as dt
+import enum
 import json
 import logging
 from collections.abc import Callable
@@ -20,6 +21,7 @@ import client_spec
 import completion_client
 import dataset_builder
 import error
+import gold_scope
 import judge
 import pydantic
 import tqdm
@@ -27,6 +29,14 @@ import tqdm
 logger = logging.getLogger(__name__)
 
 ClientFactory = Callable[[client_spec.ClientSpec], completion_client.CompletionClient]
+SCOPED_JUDGE_RUN_SUFFIX = "__gold_scope"
+
+
+class JudgeTargetPolicy(enum.StrEnum):
+    """Which constraints strategy-side judging should evaluate."""
+
+    ALL_CONSTRAINTS = "all_constraints"
+    GOLD_SCOPE = "gold_scope"
 
 
 class AgentMatrixConfig(base.FrozenModel):
@@ -73,6 +83,8 @@ class ExperimentSpec(base.FrozenModel):
     constraints_file: Path
     instance_limit: int | None = None
     judge_config: judge.JudgeConfig
+    gold_scope_judge_config: judge.JudgeConfig | None = None
+    judge_target_policy: JudgeTargetPolicy = JudgeTargetPolicy.ALL_CONSTRAINTS
     agent_configs: tuple[agent_runner.AgentRunConfig, ...] = ()
     agent_matrix: AgentMatrixConfig | None = None
 
@@ -90,6 +102,13 @@ class ExperimentSpec(base.FrozenModel):
             return tuple(cast("list[agent_runner.AgentRunConfig]", value))
         return value
 
+    @pydantic.field_validator("judge_target_policy", mode="before")
+    @classmethod
+    def validate_judge_target_policy(cls, value: object) -> object:
+        if isinstance(value, str):
+            return JudgeTargetPolicy(value)
+        return value
+
     @pydantic.model_validator(mode="after")
     def validate_agent_config_source(self) -> ExperimentSpec:
         if self.agent_configs and self.agent_matrix is not None:
@@ -98,6 +117,9 @@ class ExperimentSpec(base.FrozenModel):
         if not self.agent_configs and self.agent_matrix is None:
             msg = "ExperimentSpec requires `agent_configs` or `agent_matrix`."
             raise ValueError(msg)
+        if self.gold_scope_judge_config is None:
+            derived = self.judge_config.model_copy(update={"judge_mode": judge.JudgeMode.PATCH_ONLY})
+            object.__setattr__(self, "gold_scope_judge_config", derived)
         if self.agent_matrix is None:
             return self
         return self.model_copy(update={"agent_configs": _expand_agent_matrix(self.agent_matrix)})
@@ -295,6 +317,8 @@ def _execute_run(
         )
         if agent_result.status != agent_runner.AgentRunStatus.FAILED
     )
+    scoped_new_rules = gold_scope.load_gold_scope(spec.results_root)
+    scoped_existing_rules = gold_scope.load_existing_rule_scope(spec.results_root)
     judge_progress = tqdm.tqdm(
         judged_inputs,
         desc=f"judge[{agent_config.run_id}]",
@@ -302,15 +326,15 @@ def _execute_run(
         ncols=88,
     )
     judgments = tuple(
-        judge.judge_instance(
+        _judge_agent_result(
+            spec=spec,
             instance=instance,
-            predicted_patch=agent_result.predicted_patch,
             gold_patch=gold_patch,
+            agent_result=agent_result,
             constraints=constraints,
-            client=judge_client,
-            config=spec.judge_config,
-            run_id=agent_result.run_id,
-            results_root=spec.results_root,
+            judge_client=judge_client,
+            scoped_new_rules=scoped_new_rules,
+            scoped_existing_rules=scoped_existing_rules,
         )
         for instance, gold_patch, agent_result in judge_progress
     )
@@ -344,6 +368,121 @@ def _execute_run(
         instances_with_test_failure=instance_status_counts[judge.JudgmentStatus.TEST_FAILURE],
         instances_with_api_failure=instance_status_counts[judge.JudgmentStatus.API_FAILURE],
     )
+
+
+def _judge_agent_result(
+    *,
+    spec: ExperimentSpec,
+    instance: dataset_builder.DatasetInstance,
+    gold_patch: str,
+    agent_result: agent_runner.AgentRunResult,
+    constraints: tuple[atomic_constraint.AtomicConstraint, ...],
+    judge_client: completion_client.CompletionClient,
+    scoped_new_rules: dict[str, frozenset[str]],
+    scoped_existing_rules: dict[str, frozenset[str]],
+) -> judge.InstanceJudgment:
+    if spec.judge_target_policy == JudgeTargetPolicy.ALL_CONSTRAINTS:
+        return judge.judge_instance(
+            instance=instance,
+            predicted_patch=agent_result.predicted_patch,
+            gold_patch=gold_patch,
+            constraints=constraints,
+            client=judge_client,
+            config=spec.judge_config,
+            run_id=agent_result.run_id,
+            results_root=spec.results_root,
+        )
+    return _judge_agent_result_against_gold_scope(
+        spec=spec,
+        instance=instance,
+        gold_patch=gold_patch,
+        agent_result=agent_result,
+        constraints=constraints,
+        judge_client=judge_client,
+        scoped_new_rules=scoped_new_rules,
+        scoped_existing_rules=scoped_existing_rules,
+    )
+
+
+def _judge_agent_result_against_gold_scope(
+    *,
+    spec: ExperimentSpec,
+    instance: dataset_builder.DatasetInstance,
+    gold_patch: str,
+    agent_result: agent_runner.AgentRunResult,
+    constraints: tuple[atomic_constraint.AtomicConstraint, ...],
+    judge_client: completion_client.CompletionClient,
+    scoped_new_rules: dict[str, frozenset[str]],
+    scoped_existing_rules: dict[str, frozenset[str]],
+) -> judge.InstanceJudgment:
+    instance_id = str(instance.detail.pr_number)
+    scoped_run_id = _scoped_judge_run_id(agent_result.run_id)
+    selected = _constraints_in_gold_scope(
+        constraints=constraints,
+        instance_id=instance_id,
+        scoped_new_rules=scoped_new_rules,
+        scoped_existing_rules=scoped_existing_rules,
+    )
+    reused = _seed_scoped_judgments_from_full_cache(
+        results_root=spec.results_root,
+        source_run_id=agent_result.run_id,
+        scoped_run_id=scoped_run_id,
+        instance_id=instance_id,
+        selected=selected,
+    )
+    if len(reused) == len(selected):
+        return judge.InstanceJudgment(
+            instance_id=instance_id,
+            run_id=scoped_run_id,
+            judgments=reused,
+        )
+    return judge.judge_instance(
+        instance=instance,
+        predicted_patch=agent_result.predicted_patch,
+        gold_patch=gold_patch,
+        constraints=selected,
+        client=judge_client,
+        config=spec.judge_config.model_copy(update={"skip_existing": True}),
+        run_id=scoped_run_id,
+        results_root=spec.results_root,
+    )
+
+
+def _constraints_in_gold_scope(
+    *,
+    constraints: tuple[atomic_constraint.AtomicConstraint, ...],
+    instance_id: str,
+    scoped_new_rules: dict[str, frozenset[str]],
+    scoped_existing_rules: dict[str, frozenset[str]],
+) -> tuple[atomic_constraint.AtomicConstraint, ...]:
+    selected_ids = scoped_new_rules.get(instance_id, frozenset()) | scoped_existing_rules.get(instance_id, frozenset())
+    return tuple(constraint for constraint in constraints if constraint.id in selected_ids)
+
+
+def _seed_scoped_judgments_from_full_cache(
+    *,
+    results_root: Path,
+    source_run_id: str,
+    scoped_run_id: str,
+    instance_id: str,
+    selected: tuple[atomic_constraint.AtomicConstraint, ...],
+) -> tuple[judge.ConstraintJudgment, ...]:
+    selected_ids = {constraint.id for constraint in selected}
+    cached = tuple(
+        judgment
+        for judgment in judge.load_instance_judgments(results_root, source_run_id, instance_id)
+        if judgment.constraint_id in selected_ids and judgment.status == judge.JudgmentStatus.OK
+    )
+    if cached:
+        judge.save_instance_judgment(
+            judge.InstanceJudgment(instance_id=instance_id, run_id=scoped_run_id, judgments=cached),
+            results_root,
+        )
+    return cached
+
+
+def _scoped_judge_run_id(run_id: str) -> str:
+    return f"{run_id}{SCOPED_JUDGE_RUN_SUFFIX}"
 
 
 def _count_instances_per_status(

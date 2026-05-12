@@ -740,6 +740,25 @@ def _judgments_path(results_root: Path, run_id: str, instance_id: str) -> Path:
     return results_root / run_id / instance_id / "judgments.json"
 
 
+def load_instance_judgments(
+    results_root: Path,
+    run_id: str,
+    instance_id: str,
+) -> tuple[ConstraintJudgment, ...]:
+    """Read the persisted ``judgments.json`` for one ``(run_id, instance_id)`` pair.
+
+    Returns an empty tuple when the file is missing, malformed, or has no
+    ``judgments`` array. Callers wanting partial-checkpoint recovery should use
+    ``_load_completed_judgments`` instead.
+    """
+    return _read_constraint_judgments(_judgments_path(results_root, run_id, instance_id))
+
+
+def save_instance_judgment(result: InstanceJudgment, results_root: Path) -> None:
+    """Persist an already-built instance judgment under its ``run_id``."""
+    _persist_instance_judgment(result, results_root)
+
+
 def _partial_judgments_path(results_root: Path, run_id: str, instance_id: str) -> Path:
     return results_root / run_id / instance_id / "judgments.partial.json"
 

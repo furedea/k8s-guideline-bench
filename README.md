@@ -282,6 +282,10 @@ Docker 実行では `results/<run_id>/<pr_number>/worktree/` を container の `
 
 Judge の resume は `judge_config.skip_existing=true` で別に制御する．有効時は `results/<run_id>/<pr_number>/judgments.json` と `judgments.partial.json` から `status=ok` の constraint judgment を再利用し，未完了または失敗した rule だけを再判定する．`agent_matrix.skip_existing` は Agent 実行だけに効くため，実験を中断再開する設定では両方を明示する．
 
+`judge_target_policy="gold_scope"` の場合，Strategy 側 Judge は human gold patch から作った固定 scope（gold が新たに満たした規約 + gold 時点で既に守られていた規約）だけを評価する．この結果は既存の full judge 結果を壊さないよう，`results/<run_id>__gold_scope/<pr_number>/judgments.json` に保存する．既に `results/<run_id>/<pr_number>/judgments.json` に full judge 結果がある場合は，scope 内の `status=ok` judgment を scoped run にコピーして再利用し，不足分だけを新たに judge する．
+
+`judge_target_policy="all_constraints"` は従来通り全 constraint を評価する．この mode では `extra_new` を観測できるが，実行時間は長い．`gold_scope` mode では scope 外を評価しないため `extra_new` は探索指標としては使わず，通常比較では `new_rules`，`lost_existing`，`eval_error` を見る．
+
 ### Patch 回収
 
 Agent の標準出力は diff と見なさない．Agent が container 内の worktree を編集した後，runner が `git diff --no-color HEAD -- <changed_files>` を実行して `predicted_patch.diff` を作る．標準出力と標準エラーは `raw_response.txt` に保存する．Stage 4 の judge はこの diff と atomic constraint を照合する．
@@ -481,6 +485,52 @@ uv run python src/llm_judgment/run_experiment.py \
 ```
 
 `--instance-id <pr>` または `--limit N` でサブセット指定可．
+
+### Pilot fair report
+
+通常の集計では，AI が作った差分ごとに「どの規約が今回の変更に関係するか」を判定する．この方法だと，同じ model でも context strategy が変わるだけで評価対象の規約数が変わり，strategy 間比較が歪む可能性がある．
+
+pilot ではこの問題を避けるため，まず人間が merge した正解差分を Sonnet Judge で評価し，PR ごとに「この PR で本来見るべき規約」を固定する．その固定された規約集合に対して，各 AI の結果を後から採点し直す．既に作成済みの AI 実行結果と Judge 結果は再利用し，人間の正解差分から作った評価対象だけを追加で保存する．
+
+```sh
+uv run python src/llm_judgment/run_gold_scope.py \
+  --spec config/experiment_spec_pilot.json
+
+uv run python src/llm_judgment/compute_fair_report.py \
+  --spec config/experiment_spec_pilot.json
+```
+
+`compute_fair_report.py` は `results/pilot/fair_report.json` を更新し，次の列を表示する．
+
+| 列 | 意味 | 良い方向 |
+| --- | --- | --- |
+| `PR` | dataset instance の PR 番号 | - |
+| `new_rules` | 人間の正解差分が新たに満たした規約のうち，AI の差分も新たに満たせた数．`達成数/対象数` 形式 | 大きいほど良い |
+| `lost_existing` | 人間の正解差分では既に守られていた規約のうち，AI の差分後に明示的に `violated` と判定された数．`not_applicable` は含めない | 小さいほど良い |
+| `extra_new` | 人間の正解差分では新規達成扱いでないが，AI の差分では新たに満たしたと判定された規約数 | 解釈注意 |
+| `eval_error` | Judge が有効に判定できなかった数．`not_judged`，API failure，parse failure，timeout など．AI の規約違反としては数えない | 小さいほど良い |
+
+2026-05-11 時点の pilot（10 PR，3 models × 3 context strategies，73 atomic constraints for test）の結果は以下．
+
+| model | context strategy | new_rules | lost_existing | extra_new | eval_error |
+| --- | --- | --: | --: | --: | --: |
+| Qwen3.6 Plus | no_constraints | 3/5 | 0 | 1 | 0 |
+| Qwen3.6 Plus | api_conventions_md | 2/5 | 0 | 1 | 0 |
+| Qwen3.6 Plus | atomic_constraints_73_json | 4/5 | 0 | 0 | 0 |
+| MiniMax M2.7 | no_constraints | 3/5 | 0 | 1 | 0 |
+| MiniMax M2.7 | api_conventions_md | 3/5 | 0 | 1 | 0 |
+| MiniMax M2.7 | atomic_constraints_73_json | 5/5 | 0 | 1 | 0 |
+| Kimi K2.5 | no_constraints | 3/5 | 0 | 1 | 0 |
+| Kimi K2.5 | api_conventions_md | 4/5 | 0 | 3 | 0 |
+| Kimi K2.5 | atomic_constraints_73_json | 3/5 | 0 | 0 | 3 |
+
+- 人間の正解差分が新たに満たした規約は合計 5 個だけ
+- MiniMax では atomic constraints を渡した条件が 5/5 で最も良い
+- Qwen も atomic constraints を渡した条件が 4/5 で最も良い
+- Kimi は API conventions の原文 Markdown を渡した条件が 4/5 で最も良い
+- `lost_existing=0` なので，今回の pilot では「正解差分では既に守られていた規約を AI が明示的に破った」例は観測されていない
+- Kimi の atomic constraints 条件では `eval_error=3` が残っているため，その 3 件は規約違反としてではなく評価失敗として別扱いにする
+- `extra_new` は追加で良い修正をした可能性もあるが，gold scope の取りこぼしや Judge の揺れもあり得るため，個別 PR の差分確認が必要
 
 ## 開発
 
