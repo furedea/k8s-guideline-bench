@@ -1,0 +1,39 @@
+{
+  "datasets_root": "datasets",
+  "results_root": "results/local_100",
+  "repo_path": "kubernetes",
+  "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
+  "instance_limit": 100,
+  "judge_target_policy": "gold_scope",
+  "agent_matrix": {
+    "run_id_prefix": "local100",
+    "models": [
+      "openai-compatible/local-agent-model"
+    ],
+    "context_strategies": [
+      "no_constraints",
+      "api_conventions_md",
+      "atomic_constraints_73_json"
+    ],
+    "max_tokens": 8192,
+    "docker": {
+      "image": "k8s-bench-agent",
+      "agent_command": "opencode run --dangerously-skip-permissions --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
+      "docker_args": []
+    },
+    "skip_existing": true
+  },
+  "judge_config": {
+    "model": "local-judge-model",
+    "max_tokens": 1024,
+    "system_prompt": "You are an impartial judge evaluating whether a code patch newly satisfies a single atomic Kubernetes API convention rule. Respond strictly with a JSON object containing `verdict` (compliant | violated | not_applicable), `patch_effect` (applied_by_patch | already_satisfied | not_relevant | unknown), `confidence` (0..1), and `rationale`.",
+    "client": {
+      "client_type": "openai_compatible",
+      "api_key_env": "LOCAL_LLM_API_KEY",
+      "base_url": "http://sam:8000/v1"
+    },
+    "judge_mode": "reference_based",
+    "max_workers": 2,
+    "skip_existing": true
+  }
+}
