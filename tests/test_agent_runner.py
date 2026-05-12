@@ -1,6 +1,9 @@
 """Tests for AI agent runner and prompt composition."""
 
+import datetime as dt
+import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import agent_runner
@@ -8,6 +11,58 @@ import atomic_constraint
 import dataset_builder
 import pr_collection
 from pytest_mock import MockerFixture
+
+
+def _write_existing_metadata(output_dir: Path, *, status: agent_runner.AgentRunStatus) -> None:
+    metadata = {
+        "status": status.value,
+        "model": "agent-model",
+        "context_strategy": agent_runner.ContextStrategy.NO_CONSTRAINTS.value,
+        "pr_number": 42,
+        "started_at": dt.datetime(2026, 5, 1, tzinfo=dt.UTC).isoformat(),
+        "finished_at": dt.datetime(2026, 5, 1, tzinfo=dt.UTC).isoformat(),
+        "duration_seconds": 0.0,
+        "predicted_patch_bytes": 0,
+        "attached_context_files": [],
+        "exit_code": 0 if status == agent_runner.AgentRunStatus.COMPLETED else 1,
+    }
+    _ = (output_dir / "run_metadata.json").write_text(
+        json.dumps(metadata, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _make_successful_fake_run(
+    repo_path: Path,
+    results_root: Path,
+) -> Callable[..., subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]]:
+    worktree_dir = results_root / "docker-run" / "42" / "worktree"
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+        _ = capture_output, check, text, timeout
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:3] == ["git", "-C", str(worktree_dir)]:
+            return subprocess.CompletedProcess(command, 0, stdout=b"diff --git\n", stderr=b"")
+        return subprocess.CompletedProcess(command, 0, stdout="agent done", stderr="")
+
+    return fake_run
 
 
 def _make_instance(root: Path) -> dataset_builder.DatasetInstance:
@@ -229,8 +284,9 @@ def test_run_docker_agentic_instance_runs_container_and_collects_git_diff(
         capture_output: bool,
         check: bool,
         text: bool = False,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
-        _ = capture_output, text, check
+        _ = capture_output, text, check, timeout
         if command[:4] == ["git", "-C", str(repo_path), "archive"]:
             archive_path = Path(command[-1])
             archive_path.write_text("archive", encoding="utf-8")
@@ -328,8 +384,9 @@ def test_run_docker_agentic_instance_records_failures_without_raising(
         capture_output: bool,
         check: bool,
         text: bool = False,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        _ = capture_output, text, check
+        _ = capture_output, text, check, timeout
         if command[:4] == ["git", "-C", str(repo_path), "archive"]:
             Path(command[-1]).write_text("archive", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -372,7 +429,7 @@ def test_run_docker_agentic_instance_records_failures_without_raising(
     assert (output_dir / "worktree").exists()
 
 
-def test_run_docker_agentic_instance_skips_existing_patch_when_configured(
+def test_run_docker_agentic_instance_skips_when_previous_run_metadata_marks_completed(
     tmp_path: Path,
     mocker: MockerFixture,
 ) -> None:
@@ -383,6 +440,7 @@ def test_run_docker_agentic_instance_skips_existing_patch_when_configured(
     output_dir = results_root / "docker-run" / "42"
     output_dir.mkdir(parents=True)
     _ = (output_dir / "predicted_patch.diff").write_text("diff --git\n", encoding="utf-8")
+    _write_existing_metadata(output_dir, status=agent_runner.AgentRunStatus.COMPLETED)
     run_mock = mocker.patch("agent_runner.subprocess.run", autospec=True)
     config = agent_runner.AgentRunConfig(
         run_id="docker-run",
@@ -410,6 +468,114 @@ def test_run_docker_agentic_instance_skips_existing_patch_when_configured(
     run_mock.assert_not_called()
 
 
+def test_run_docker_agentic_instance_reruns_when_previous_run_metadata_marks_failed(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    output_dir = results_root / "docker-run" / "42"
+    output_dir.mkdir(parents=True)
+    _write_existing_metadata(output_dir, status=agent_runner.AgentRunStatus.FAILED)
+    _ = (output_dir / "predicted_patch.diff").write_text("stale\n", encoding="utf-8")
+
+    _ = mocker.patch(
+        "agent_runner.subprocess.run", autospec=True, side_effect=_make_successful_fake_run(repo_path, results_root)
+    )
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent",
+            agent_command='agent run "$AGENT_PROMPT_PATH"',
+        ),
+        skip_existing=True,
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    assert result.status == agent_runner.AgentRunStatus.COMPLETED
+    assert result.predicted_patch.startswith("diff --git")
+    assert '"status": "completed"' in (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+
+
+def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = capture_output, check, text
+        if command[:3] == ["docker", "run", "--rm"]:
+            raise subprocess.TimeoutExpired(cmd=command, timeout=timeout or 0)
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent",
+            agent_command='agent run "$AGENT_PROMPT_PATH"',
+            agent_timeout_seconds=30,
+        ),
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    output_dir = results_root / "docker-run" / "42"
+    assert result.status == agent_runner.AgentRunStatus.FAILED
+    assert result.predicted_patch == ""
+    raw_response = (output_dir / "raw_response.txt").read_text(encoding="utf-8")
+    assert "agent timed out after 30s" in raw_response
+    assert "exit_code=124" in raw_response
+    assert '"status": "failed"' in (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+
+
 def test_run_docker_agentic_instance_copies_attached_context_files(
     tmp_path: Path,
     mocker: MockerFixture,
@@ -428,8 +594,9 @@ def test_run_docker_agentic_instance_copies_attached_context_files(
         capture_output: bool,
         check: bool,
         text: bool = False,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
-        _ = capture_output, text, check
+        _ = capture_output, text, check, timeout
         if command[:4] == ["git", "-C", str(repo_path), "archive"]:
             Path(command[-1]).write_text("archive", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -492,8 +659,9 @@ def test_git_worktree_strategy_mounts_real_git_worktree(
         capture_output: bool,
         check: bool,
         text: bool = False,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
-        _ = capture_output, text, check
+        _ = capture_output, text, check, timeout
         if command[:2] == ["git", "-C"] and "worktree" in command:
             if "add" in command:
                 Path(command[-2]).mkdir(parents=True, exist_ok=True)

@@ -280,6 +280,8 @@ uv run python src/llm_judgment/run_experiment.py \
 
 Docker 実行では `results/<run_id>/<pr_number>/worktree/` を container の `/work` に mount する．Agent は `/work` を直接編集し，runner が実行後の diff を `predicted_patch.diff` として保存する．`AgentRunConfig.skip_existing=true` の場合，既存の `results/<run_id>/<pr_number>/predicted_patch.diff` があれば Docker 実行を skip し，resume 用の既存結果として扱う．成功した instance の worktree は既定で削除し，失敗した instance は原因調査用に既定で残す．Agent command が失敗した instance は `raw_response.txt` に exit code と stdout/stderr を残し，Judge には渡さず run 全体は続行する．
 
+Judge の resume は `judge_config.skip_existing=true` で別に制御する．有効時は `results/<run_id>/<pr_number>/judgments.json` と `judgments.partial.json` から `status=ok` の constraint judgment を再利用し，未完了または失敗した rule だけを再判定する．`agent_matrix.skip_existing` は Agent 実行だけに効くため，実験を中断再開する設定では両方を明示する．
+
 ### Patch 回収
 
 Agent の標準出力は diff と見なさない．Agent が container 内の worktree を編集した後，runner が `git diff --no-color HEAD -- <changed_files>` を実行して `predicted_patch.diff` を作る．標準出力と標準エラーは `raw_response.txt` に保存する．Stage 4 の judge はこの diff と atomic constraint を照合する．

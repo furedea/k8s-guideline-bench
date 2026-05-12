@@ -1,15 +1,18 @@
 """Tests for LLM-as-a-Judge evaluator."""
 
 import json
+import logging
 import subprocess
 import threading
 from pathlib import Path
 
 import atomic_constraint
+import claude_cli_client
 import client_spec
 import dataset_builder
 import judge
 import pr_collection
+import pytest
 from pytest_mock import MockerFixture
 
 
@@ -153,8 +156,89 @@ def test_parse_judge_response_supports_bare_json_without_fence() -> None:
     judgment = judge.parse_judge_response(response, constraint_id="atom_001")
 
     assert judgment.verdict == judge.JudgeVerdict.VIOLATED
-    assert judgment.patch_effect == judge.PatchEffect.NOT_RELEVANT
+    assert judgment.patch_effect == judge.PatchEffect.NOT_APPLICABLE
     assert judgment.rationale == "Missing kind field."
+
+
+def test_parse_judge_response_normalizes_not_relevant_to_not_applicable() -> None:
+    response = '{"verdict": "violated", "patch_effect": "not_relevant", "confidence": 0.5, "rationale": ""}'
+
+    judgment = judge.parse_judge_response(response, constraint_id="atom_001")
+
+    assert judgment.patch_effect == judge.PatchEffect.NOT_APPLICABLE
+
+
+def test_parse_judge_response_forces_compliant_with_unknown_patch_effect_when_not_applicable_provided() -> None:
+    response = (
+        '{"verdict": "compliant", "patch_effect": "not_applicable", '
+        '"confidence": 0.6, "rationale": "compliant but effect unclear"}'
+    )
+
+    judgment = judge.parse_judge_response(response, constraint_id="atom_001")
+
+    assert judgment.verdict == judge.JudgeVerdict.COMPLIANT
+    assert judgment.patch_effect == judge.PatchEffect.UNKNOWN
+
+
+def test_parse_judge_response_rejects_reserved_not_judged_verdict() -> None:
+    response = '{"verdict": "not_judged", "confidence": 0.0, "rationale": ""}'
+
+    judgment = judge.parse_judge_response(response, constraint_id="atom_001")
+
+    assert judgment.status == judge.JudgmentStatus.PARSE_FAILURE
+    assert judgment.verdict == judge.JudgeVerdict.NOT_JUDGED
+    assert judgment.patch_effect == judge.PatchEffect.NOT_JUDGED
+
+
+def test_failure_judgment_uses_not_judged_placeholders_for_verdict_and_patch_effect() -> None:
+    judgment = judge._failure_judgment(  # type: ignore[attr-defined]
+        "atom_001",
+        judge.JudgmentStatus.API_FAILURE,
+        "boom",
+    )
+
+    assert judgment.verdict == judge.JudgeVerdict.NOT_JUDGED
+    assert judgment.patch_effect == judge.PatchEffect.NOT_JUDGED
+    assert judgment.confidence == 0.0
+    assert judgment.rationale == "boom"
+
+
+def test_constraint_judgment_normalizes_legacy_failure_with_not_applicable_verdict() -> None:
+    judgment = judge.ConstraintJudgment(
+        constraint_id="atom_001",
+        status=judge.JudgmentStatus.PARSE_FAILURE,
+        verdict=judge.JudgeVerdict.NOT_APPLICABLE,
+        confidence=0.4,
+        rationale="legacy",
+    )
+
+    assert judgment.verdict == judge.JudgeVerdict.NOT_JUDGED
+    assert judgment.patch_effect == judge.PatchEffect.NOT_JUDGED
+    assert judgment.confidence == 0.0
+
+
+def test_constraint_judgment_violated_forces_patch_effect_to_not_applicable() -> None:
+    judgment = judge.ConstraintJudgment(
+        constraint_id="atom_001",
+        verdict=judge.JudgeVerdict.VIOLATED,
+        rationale="rule broken",
+    )
+
+    assert judgment.patch_effect == judge.PatchEffect.NOT_APPLICABLE
+
+
+def test_constraint_judgment_field_dump_order_starts_with_constraint_id_and_status() -> None:
+    judgment = judge.ConstraintJudgment(
+        constraint_id="atom_001",
+        verdict=judge.JudgeVerdict.COMPLIANT,
+        confidence=0.9,
+        rationale="ok",
+        patch_effect=judge.PatchEffect.APPLIED_BY_PATCH,
+    )
+
+    keys = tuple(judgment.model_dump(mode="json").keys())
+
+    assert keys == ("constraint_id", "status", "verdict", "patch_effect", "confidence", "rationale")
 
 
 def test_parse_judge_response_defaults_patch_effect_to_unknown_for_old_responses() -> None:
@@ -385,6 +469,270 @@ def test_judge_instance_skip_existing_returns_existing_judgments_without_calling
     assert stub_client.call_count == 0
     assert result.judgments[0].verdict == judge.JudgeVerdict.VIOLATED
     assert result.judgments[0].rationale == "cached"
+
+
+def test_judge_instance_skip_existing_reruns_non_ok_constraints_and_keeps_ok(
+    tmp_path: Path,
+) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    results_root = tmp_path / "results"
+    output_dir = results_root / "run-001" / "42"
+    output_dir.mkdir(parents=True)
+    preexisting = judge.InstanceJudgment(
+        instance_id="42",
+        run_id="run-001",
+        judgments=(
+            judge.ConstraintJudgment(
+                constraint_id="atom_001",
+                verdict=judge.JudgeVerdict.COMPLIANT,
+                confidence=0.9,
+                rationale="cached-ok",
+            ),
+            judge.ConstraintJudgment(
+                constraint_id="atom_002",
+                status=judge.JudgmentStatus.API_FAILURE,
+                confidence=0.0,
+                rationale="prior api failure",
+            ),
+        ),
+    )
+    _ = (output_dir / "judgments.json").write_text(
+        json.dumps(preexisting.model_dump(mode="json")),
+        encoding="utf-8",
+    )
+    stub_client = _stub_client_with_counter()
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        skip_existing=True,
+    )
+
+    result = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=stub_client,
+        config=config,
+        run_id="run-001",
+        results_root=results_root,
+    )
+
+    assert stub_client.call_count == 1
+    by_id = {j.constraint_id: j for j in result.judgments}
+    assert by_id["atom_001"].rationale == "cached-ok"
+    assert by_id["atom_002"].verdict == judge.JudgeVerdict.COMPLIANT
+    assert by_id["atom_002"].rationale == "ok"
+
+
+def test_judge_instance_skip_existing_consults_partial_checkpoint_for_ok_constraints(
+    tmp_path: Path,
+) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    results_root = tmp_path / "results"
+    output_dir = results_root / "run-001" / "42"
+    output_dir.mkdir(parents=True)
+    partial_payload = {
+        "judgments": [
+            judge.ConstraintJudgment(
+                constraint_id="atom_001",
+                verdict=judge.JudgeVerdict.VIOLATED,
+                confidence=0.5,
+                rationale="from-partial",
+            ).model_dump(mode="json"),
+        ],
+    }
+    _ = (output_dir / "judgments.partial.json").write_text(
+        json.dumps(partial_payload),
+        encoding="utf-8",
+    )
+    stub_client = _stub_client_with_counter()
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        skip_existing=True,
+    )
+
+    result = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=stub_client,
+        config=config,
+        run_id="run-001",
+        results_root=results_root,
+    )
+
+    assert stub_client.call_count == 1
+    by_id = {j.constraint_id: j for j in result.judgments}
+    assert by_id["atom_001"].rationale == "from-partial"
+    assert by_id["atom_002"].verdict == judge.JudgeVerdict.COMPLIANT
+
+
+def test_judge_instance_propagates_claude_cli_fatal_error_and_keeps_completed_partial(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    completed_first = threading.Event()
+
+    class FatalAfterFirstClient:
+        call_count = 0
+        call_lock = threading.Lock()
+
+        def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+            _ = system, model, max_tokens
+            constraint_id = _constraint_id_from_prompt(user)
+            with FatalAfterFirstClient.call_lock:
+                FatalAfterFirstClient.call_count += 1
+                count = FatalAfterFirstClient.call_count
+            if count == 1:
+                completed_first.set()
+                return f'{{"verdict": "compliant", "confidence": 0.7, "rationale": "ok-{constraint_id}"}}'
+            assert completed_first.wait(timeout=1.0)
+            raise claude_cli_client.ClaudeCliFatalError(
+                returncode=2,
+                stdout="partial",
+                stderr="auth required",
+            )
+
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        max_workers=1,
+    )
+    results_root = tmp_path / "results"
+
+    with caplog.at_level(logging.ERROR), pytest.raises(claude_cli_client.ClaudeCliFatalError) as exc_info:
+        _ = judge.judge_instance(
+            instance=instance,
+            predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+            gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+            constraints=constraints,
+            client=FatalAfterFirstClient(),
+            config=config,
+            run_id="run-001",
+            results_root=results_root,
+        )
+
+    assert exc_info.value.returncode == 2
+    instance_dir = results_root / "run-001" / "42"
+    partial_path = instance_dir / "judgments.partial.json"
+    partial = json.loads(partial_path.read_text(encoding="utf-8"))
+    assert [j["constraint_id"] for j in partial["judgments"]] == ["atom_001"]
+    assert partial["judgments"][0]["status"] == "ok"
+    assert not (instance_dir / "judgments.json").exists()
+    error_log = (instance_dir / "judge_errors.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(error_log) == 1
+    error_record = json.loads(error_log[0])
+    assert error_record["constraint_id"] == "atom_002"
+    assert error_record["returncode"] == 2
+    assert error_record["instance_id"] == "42"
+    assert error_record["run_id"] == "run-001"
+    assert "auth required" in error_record["stderr"]
+    assert all("predicted" not in record.message for record in caplog.records)
+
+
+def test_judge_instance_does_not_retry_claude_cli_fatal_error(tmp_path: Path) -> None:
+    instance = _instance(tmp_path)
+    constraints = (_constraint_with_id("atom_001"),)
+
+    class AlwaysFatalClient:
+        call_count = 0
+
+        def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+            _ = system, user, model, max_tokens
+            AlwaysFatalClient.call_count += 1
+            raise claude_cli_client.ClaudeCliFatalError(returncode=2, stdout="", stderr="boom")
+
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        max_retries=3,
+    )
+
+    with pytest.raises(claude_cli_client.ClaudeCliFatalError):
+        _ = judge.judge_instance(
+            instance=instance,
+            predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+            gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+            constraints=constraints,
+            client=AlwaysFatalClient(),
+            config=config,
+            run_id="run-001",
+            results_root=tmp_path / "results",
+        )
+
+    assert AlwaysFatalClient.call_count == 1
+
+
+def test_judge_instance_writes_partial_checkpoint_after_each_ok_constraint(tmp_path: Path) -> None:
+    instance = _instance(tmp_path)
+    constraints = (
+        _constraint_with_id("atom_001"),
+        _constraint_with_id("atom_002"),
+    )
+    seen_partial_sizes: list[int] = []
+    seen_partial_lock = threading.Lock()
+    partial_path = tmp_path / "results" / "run-001" / "42" / "judgments.partial.json"
+
+    def record_partial_size() -> None:
+        try:
+            document = json.loads(partial_path.read_text(encoding="utf-8"))
+            with seen_partial_lock:
+                seen_partial_sizes.append(len(document["judgments"]))
+        except FileNotFoundError:
+            with seen_partial_lock:
+                seen_partial_sizes.append(0)
+
+    class ObservingClient:
+        def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
+            _ = system, model, max_tokens
+            constraint_id = _constraint_id_from_prompt(user)
+            record_partial_size()
+            return f'{{"verdict": "compliant", "confidence": 0.7, "rationale": "judged {constraint_id}"}}'
+
+    config = judge.JudgeConfig(
+        model="claude-opus-4-7",
+        max_tokens=1024,
+        system_prompt="judge",
+        client=_client_spec(),
+        max_workers=1,
+    )
+
+    _ = judge.judge_instance(
+        instance=instance,
+        predicted_patch="diff --git a/api/foo.go b/api/foo.go\n+field\n",
+        gold_patch="diff --git a/api/foo.go b/api/foo.go\n+gold\n",
+        constraints=constraints,
+        client=ObservingClient(),
+        config=config,
+        run_id="run-001",
+        results_root=tmp_path / "results",
+    )
+
+    assert seen_partial_sizes == [0, 1]
 
 
 def test_judge_instance_skip_existing_false_overwrites_existing_judgments(
@@ -813,14 +1161,14 @@ def test_newly_satisfied_rate_counts_only_constraints_applied_by_patch() -> None
                     verdict=judge.JudgeVerdict.VIOLATED,
                     confidence=1.0,
                     rationale="still violated",
-                    patch_effect=judge.PatchEffect.NOT_RELEVANT,
+                    patch_effect=judge.PatchEffect.NOT_APPLICABLE,
                 ),
                 judge.ConstraintJudgment(
                     constraint_id="c4",
                     verdict=judge.JudgeVerdict.NOT_APPLICABLE,
                     confidence=1.0,
                     rationale="outside scope",
-                    patch_effect=judge.PatchEffect.NOT_RELEVANT,
+                    patch_effect=judge.PatchEffect.NOT_APPLICABLE,
                 ),
             ),
         ),

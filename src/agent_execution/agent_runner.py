@@ -55,6 +55,7 @@ class DockerAgentConfig(base.FrozenModel):
     worktree_path: str = "/work"
     bench_context_path: str = "/bench"
     output_path: str = "/out"
+    agent_timeout_seconds: int = 1800
 
     @pydantic.field_validator("docker_args", "env_passthrough", mode="before")
     @classmethod
@@ -156,6 +157,7 @@ DOCKER_PROMPT_FILENAME = "prompt.txt"
 DOCKER_TASK_FILENAME = "task.json"
 DOCKER_CONSTRAINTS_FILENAME = "constraints.json"
 RUN_METADATA_FILENAME = "run_metadata.json"
+AGENT_TIMEOUT_EXIT_CODE = 124
 
 
 def build_agentic_workspace_prompt(
@@ -319,7 +321,8 @@ def _run_docker_agent_on_instance(
     context_dir = output_dir / "bench_context"
     worktree_dir = output_dir / "worktree"
     predicted_patch_path = output_dir / "predicted_patch.diff"
-    if config.skip_existing and predicted_patch_path.exists():
+    metadata_path = output_dir / RUN_METADATA_FILENAME
+    if config.skip_existing and _is_previous_run_skippable(metadata_path):
         started_at = dt.datetime.now(tz=dt.UTC)
         _write_run_metadata(
             output_dir=output_dir,
@@ -332,7 +335,7 @@ def _run_docker_agent_on_instance(
         )
         return AgentRunResult(
             run_id=config.run_id,
-            predicted_patch=predicted_patch_path.read_text(encoding="utf-8"),
+            predicted_patch=_read_predicted_patch(predicted_patch_path),
             status=AgentRunStatus.SKIPPED,
         )
 
@@ -490,7 +493,16 @@ def _run_docker_agent_command(
         "-lc",
         shell_script,
     ]
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=docker_config.agent_timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return _completed_process_from_timeout(command, docker_config.agent_timeout_seconds)
 
 
 def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
@@ -616,6 +628,44 @@ def _write_run_metadata(
     _ = (output_dir / RUN_METADATA_FILENAME).write_text(
         json.dumps(metadata.model_dump(mode="json"), indent=2, ensure_ascii=False),
         encoding="utf-8",
+    )
+
+
+def _is_previous_run_skippable(metadata_path: Path) -> bool:
+    """Return True when a previous run finished successfully or was already skipped."""
+    if not metadata_path.exists():
+        return False
+    try:
+        metadata_data = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except OSError, json.JSONDecodeError:
+        return False
+    if not isinstance(metadata_data, dict):
+        return False
+    status_value = metadata_data.get("status")
+    if not isinstance(status_value, str):
+        return False
+    try:
+        status = AgentRunStatus(status_value)
+    except ValueError:
+        return False
+    return status in {AgentRunStatus.COMPLETED, AgentRunStatus.SKIPPED}
+
+
+def _read_predicted_patch(predicted_patch_path: Path) -> str:
+    if not predicted_patch_path.exists():
+        return ""
+    return predicted_patch_path.read_text(encoding="utf-8")
+
+
+def _completed_process_from_timeout(
+    command: list[str],
+    timeout_seconds: int,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=command,
+        returncode=AGENT_TIMEOUT_EXIT_CODE,
+        stdout="",
+        stderr=f"agent timed out after {timeout_seconds}s",
     )
 
 

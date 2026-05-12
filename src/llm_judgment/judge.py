@@ -3,16 +3,19 @@
 import enum
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 import atomic_constraint
 import base
+import claude_cli_client
 import client_spec
 import completion_client
 import dataset_builder
@@ -24,18 +27,35 @@ logger = logging.getLogger(__name__)
 
 
 class JudgeVerdict(enum.StrEnum):
-    """Verdict emitted by the LLM judge for a single atomic constraint."""
+    """Verdict emitted by the LLM judge for a single atomic constraint.
+
+    `NOT_JUDGED` is the placeholder used when the judgment never produced a
+    real verdict (e.g., parse / API / verification failure). Keeping the
+    failure mode out of `NOT_APPLICABLE` lets summaries separate genuine
+    "rule does not apply" answers from upstream failures.
+    """
 
     COMPLIANT = "compliant"
     VIOLATED = "violated"
     NOT_APPLICABLE = "not_applicable"
+    NOT_JUDGED = "not_judged"
 
 
 class PatchEffect(enum.StrEnum):
-    """Whether the predicted patch is responsible for satisfying the constraint."""
+    """Whether the predicted patch is responsible for satisfying the constraint.
+
+    `NOT_APPLICABLE` covers verdicts whose constraint either does not apply
+    (`verdict=not_applicable`) or is still violated (`verdict=violated`); both
+    cases share that the patch effect is not meaningful. `NOT_JUDGED` is the
+    placeholder used when the judgment itself never completed. `NOT_RELEVANT`
+    is kept only for backward-compatible parsing of historical responses; it
+    is normalized to `NOT_APPLICABLE` before storage.
+    """
 
     APPLIED_BY_PATCH = "applied_by_patch"
     ALREADY_SATISFIED = "already_satisfied"
+    NOT_APPLICABLE = "not_applicable"
+    NOT_JUDGED = "not_judged"
     NOT_RELEVANT = "not_relevant"
     UNKNOWN = "unknown"
 
@@ -90,14 +110,20 @@ class PatchVerification(enum.StrEnum):
 
 
 class ConstraintJudgment(base.FrozenModel):
-    """Per-constraint judgment result."""
+    """Per-constraint judgment result.
+
+    Fields are ordered so the JSON dump puts pipeline metadata
+    (`constraint_id`, `status`) first, the LLM-produced answer
+    (`verdict`, `patch_effect`) next, and the supporting metrics
+    (`confidence`, `rationale`) last.
+    """
 
     constraint_id: str
-    verdict: JudgeVerdict
-    confidence: float
-    rationale: str
     status: JudgmentStatus = JudgmentStatus.OK
-    patch_effect: PatchEffect = PatchEffect.UNKNOWN
+    verdict: JudgeVerdict = JudgeVerdict.NOT_JUDGED
+    patch_effect: PatchEffect = PatchEffect.NOT_JUDGED
+    confidence: float = 0.0
+    rationale: str = ""
 
     @pydantic.field_validator("verdict", mode="before")
     @classmethod
@@ -117,8 +143,38 @@ class ConstraintJudgment(base.FrozenModel):
     @classmethod
     def validate_patch_effect(cls, value: object) -> object:
         if isinstance(value, str):
-            return PatchEffect(value)
+            normalized = PatchEffect.NOT_APPLICABLE if value == PatchEffect.NOT_RELEVANT else PatchEffect(value)
+            return normalized
+        if value is PatchEffect.NOT_RELEVANT:
+            return PatchEffect.NOT_APPLICABLE
         return value
+
+    @pydantic.model_validator(mode="after")
+    def normalize_judgment(self) -> ConstraintJudgment:
+        if self.status != JudgmentStatus.OK:
+            target_verdict = JudgeVerdict.NOT_JUDGED
+            target_patch_effect = PatchEffect.NOT_JUDGED
+            target_confidence = 0.0
+        elif self.verdict == JudgeVerdict.COMPLIANT:
+            target_verdict = self.verdict
+            target_patch_effect = (
+                self.patch_effect if self.patch_effect in _COMPLIANT_PATCH_EFFECTS else PatchEffect.UNKNOWN
+            )
+            target_confidence = self.confidence
+        else:
+            target_verdict = self.verdict
+            target_patch_effect = PatchEffect.NOT_APPLICABLE
+            target_confidence = self.confidence
+        if (
+            self.verdict == target_verdict
+            and self.patch_effect == target_patch_effect
+            and self.confidence == target_confidence
+        ):
+            return self
+        object.__setattr__(self, "verdict", target_verdict)
+        object.__setattr__(self, "patch_effect", target_patch_effect)
+        object.__setattr__(self, "confidence", target_confidence)
+        return self
 
 
 class InstanceJudgment(base.FrozenModel):
@@ -199,7 +255,7 @@ DEFAULT_JUDGE_SYSTEM_PROMPT = (
     "You are an impartial judge evaluating whether a code patch complies with a single "
     "atomic Kubernetes API convention rule. Respond strictly with a JSON object containing "
     "`verdict` (compliant | violated | not_applicable), "
-    "`patch_effect` (applied_by_patch | already_satisfied | not_relevant | unknown), "
+    "`patch_effect` (applied_by_patch | already_satisfied | not_applicable | unknown), "
     "`confidence` (0..1), and `rationale`."
 )
 
@@ -269,22 +325,32 @@ def parse_judge_response(response: str, constraint_id: str) -> ConstraintJudgmen
 
     Returns `status=PARSE_FAILURE` when the response cannot be parsed so the
     pipeline can keep running and the failure is visible in summaries
-    distinct from genuine `not_applicable` verdicts.
+    distinct from genuine `not_applicable` verdicts. Verdict / patch_effect
+    consistency (e.g., a non-compliant verdict implies `not_applicable`) is
+    enforced by `ConstraintJudgment.normalize_judgment`.
     """
     payload = _extract_json_payload(response)
     if payload is None:
         return _failure_judgment(constraint_id, JudgmentStatus.PARSE_FAILURE, "Unparseable response.")
     try:
         document: dict[str, Any] = json.loads(payload)
+        verdict = JudgeVerdict(document["verdict"])
+        if verdict == JudgeVerdict.NOT_JUDGED:
+            return _failure_judgment(constraint_id, JudgmentStatus.PARSE_FAILURE, "Verdict not_judged is reserved.")
         return ConstraintJudgment(
             constraint_id=constraint_id,
-            verdict=JudgeVerdict(document["verdict"]),
+            verdict=verdict,
             confidence=float(document.get("confidence", 0.0)),
             rationale=str(document.get("rationale", "")),
             patch_effect=PatchEffect(document.get("patch_effect", PatchEffect.UNKNOWN.value)),
         )
     except ValueError, KeyError, pydantic.ValidationError:
         return _failure_judgment(constraint_id, JudgmentStatus.PARSE_FAILURE, "Malformed judge JSON.")
+
+
+_COMPLIANT_PATCH_EFFECTS: frozenset[PatchEffect] = frozenset(
+    {PatchEffect.APPLIED_BY_PATCH, PatchEffect.ALREADY_SATISFIED, PatchEffect.UNKNOWN},
+)
 
 
 def judge_instance(
@@ -300,18 +366,54 @@ def judge_instance(
     """Evaluate a single dataset instance against every atomic constraint.
 
     `run_id` scopes where judgments are persisted (alongside the agent run that
-    produced `predicted_patch`), separate from judge-model configuration.
-    When `config.skip_existing` is true and a previous `judgments.json` is on
-    disk, return that result without calling the LLM. Re-judging therefore
-    requires either disabling the flag or removing the file.
+    produced `predicted_patch`), separate from judge-model configuration. When
+    `config.skip_existing` is true the completed (`status=OK`) judgments from
+    `judgments.json` and `judgments.partial.json` are reused per constraint;
+    every constraint without an `OK` entry is re-judged. Each successful
+    constraint is checkpointed to `judgments.partial.json` so an interrupted
+    run can resume without redoing finished work.
     """
     instance_id = str(instance.detail.pr_number)
-    if config.skip_existing:
-        cached = _load_existing_judgment(results_root, run_id, instance_id)
-        if cached is not None:
-            return cached
     selected = _select_constraints(constraints, config.judge_target_selection)
+    completed = _load_completed_judgments(results_root, run_id, instance_id) if config.skip_existing else {}
+    pending = tuple(constraint for constraint in selected if constraint.id not in completed)
+    if not pending:
+        return _finalize_instance_judgment(
+            results_root,
+            run_id,
+            instance_id,
+            tuple(completed[constraint.id] for constraint in selected),
+        )
     _persist_judge_targets(results_root, run_id, instance_id, selected, config.judge_target_selection)
+    new_judgments = _judge_pending_constraints(
+        instance=instance,
+        predicted_patch=predicted_patch,
+        gold_patch=gold_patch,
+        pending=pending,
+        client=client,
+        config=config,
+        run_id=run_id,
+        instance_id=instance_id,
+        results_root=results_root,
+        completed=completed,
+    )
+    merged = _merge_judgments(selected, completed, new_judgments)
+    return _finalize_instance_judgment(results_root, run_id, instance_id, merged)
+
+
+def _judge_pending_constraints(
+    *,
+    instance: dataset_builder.DatasetInstance,
+    predicted_patch: str,
+    gold_patch: str,
+    pending: tuple[atomic_constraint.AtomicConstraint, ...],
+    client: completion_client.CompletionClient,
+    config: JudgeConfig,
+    run_id: str,
+    instance_id: str,
+    results_root: Path,
+    completed: dict[str, ConstraintJudgment],
+) -> tuple[ConstraintJudgment, ...]:
     verification_failure = _verify_patch(
         instance,
         predicted_patch,
@@ -319,26 +421,52 @@ def judge_instance(
         config.verification_timeout_seconds,
     )
     if verification_failure is not None:
-        judgments = tuple(
+        return tuple(
             _failure_judgment(constraint.id, verification_failure.status, verification_failure.rationale)
-            for constraint in selected
+            for constraint in pending
         )
-    else:
-        judgments = _judge_constraints_parallel(
-            instance,
-            predicted_patch,
-            gold_patch,
-            selected,
-            client,
-            config,
-            run_id,
-            instance_id,
-        )
-    result = InstanceJudgment(
+    checkpoint = _PartialCheckpoint(
+        path=_partial_judgments_path(results_root, run_id, instance_id),
         instance_id=instance_id,
         run_id=run_id,
-        judgments=judgments,
+        seed=completed,
     )
+    return _judge_constraints_parallel(
+        instance,
+        predicted_patch,
+        gold_patch,
+        pending,
+        client,
+        config,
+        run_id,
+        instance_id,
+        results_root=results_root,
+        checkpoint=checkpoint,
+    )
+
+
+def _merge_judgments(
+    selected: tuple[atomic_constraint.AtomicConstraint, ...],
+    completed: dict[str, ConstraintJudgment],
+    new_judgments: tuple[ConstraintJudgment, ...],
+) -> tuple[ConstraintJudgment, ...]:
+    new_by_id = {judgment.constraint_id: judgment for judgment in new_judgments}
+    merged: list[ConstraintJudgment] = []
+    for constraint in selected:
+        if constraint.id in new_by_id:
+            merged.append(new_by_id[constraint.id])
+        else:
+            merged.append(completed[constraint.id])
+    return tuple(merged)
+
+
+def _finalize_instance_judgment(
+    results_root: Path,
+    run_id: str,
+    instance_id: str,
+    judgments: tuple[ConstraintJudgment, ...],
+) -> InstanceJudgment:
+    result = InstanceJudgment(instance_id=instance_id, run_id=run_id, judgments=judgments)
     _persist_instance_judgment(result, results_root)
     return result
 
@@ -387,6 +515,49 @@ def _is_newly_satisfied(judgment: ConstraintJudgment) -> bool:
     return judgment.verdict == JudgeVerdict.COMPLIANT and judgment.patch_effect == PatchEffect.APPLIED_BY_PATCH
 
 
+class _PartialCheckpoint:
+    """Thread-safe writer for `judgments.partial.json` that preserves OK results.
+
+    Only `status=JudgmentStatus.OK` constraints are recorded so an
+    interrupted run resumes from clean, reusable state without dragging
+    transient API / parse failures forward.
+    """
+
+    __slots__ = ("_completed", "_instance_id", "_lock", "_path", "_run_id")
+
+    def __init__(
+        self,
+        *,
+        path: Path,
+        instance_id: str,
+        run_id: str,
+        seed: dict[str, ConstraintJudgment],
+    ) -> None:
+        self._lock = threading.Lock()
+        self._path = path
+        self._instance_id = instance_id
+        self._run_id = run_id
+        self._completed: dict[str, ConstraintJudgment] = {
+            constraint_id: judgment for constraint_id, judgment in seed.items() if judgment.status == JudgmentStatus.OK
+        }
+
+    def record(self, judgment: ConstraintJudgment) -> None:
+        if judgment.status != JudgmentStatus.OK:
+            return
+        with self._lock:
+            self._completed[judgment.constraint_id] = judgment
+            self._flush_locked()
+
+    def _flush_locked(self) -> None:
+        ordered_ids = sorted(self._completed)
+        document = {
+            "instance_id": self._instance_id,
+            "run_id": self._run_id,
+            "judgments": [self._completed[constraint_id].model_dump(mode="json") for constraint_id in ordered_ids],
+        }
+        _atomic_write_json(self._path, document)
+
+
 def _judge_single_constraint(
     instance: dataset_builder.DatasetInstance,
     constraint: atomic_constraint.AtomicConstraint,
@@ -405,6 +576,8 @@ def _judge_single_constraint(
                 model=config.model,
                 max_tokens=config.max_tokens,
             )
+        except claude_cli_client.ClaudeCliFatalError:
+            raise
         except Exception as exc:
             last_error = exc
             continue
@@ -433,6 +606,9 @@ def _judge_constraints_parallel(
     config: JudgeConfig,
     run_id: str,
     instance_id: str,
+    *,
+    results_root: Path,
+    checkpoint: _PartialCheckpoint | None = None,
 ) -> tuple[ConstraintJudgment, ...]:
     workers = max(config.max_workers, 1)
     if workers == 1:
@@ -443,10 +619,23 @@ def _judge_constraints_parallel(
             ncols=88,
             leave=False,
         )
-        return tuple(
-            _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
-            for constraint in progress
-        )
+        judgments_list: list[ConstraintJudgment] = []
+        for constraint in progress:
+            try:
+                judgment = _judge_single_constraint(instance, constraint, predicted_patch, gold_patch, client, config)
+            except claude_cli_client.ClaudeCliFatalError as error:
+                _record_fatal_error(
+                    results_root=results_root,
+                    run_id=run_id,
+                    instance_id=instance_id,
+                    constraint_id=constraint.id,
+                    error=error,
+                )
+                raise
+            judgments_list.append(judgment)
+            if checkpoint is not None:
+                checkpoint.record(judgment)
+        return tuple(judgments_list)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_constraint = {
             executor.submit(
@@ -468,16 +657,91 @@ def _judge_constraints_parallel(
             ncols=88,
             leave=False,
         )
-        judgments_list = [future.result() for future in progress]
+        judgments_list = []
+        try:
+            for future in progress:
+                try:
+                    judgment = future.result()
+                except claude_cli_client.ClaudeCliFatalError as error:
+                    failed_constraint = future_to_constraint[future]
+                    _record_fatal_error(
+                        results_root=results_root,
+                        run_id=run_id,
+                        instance_id=instance_id,
+                        constraint_id=failed_constraint.id,
+                        error=error,
+                    )
+                    raise
+                judgments_list.append(judgment)
+                if checkpoint is not None:
+                    checkpoint.record(judgment)
+        except claude_cli_client.ClaudeCliFatalError:
+            for pending_future in future_to_constraint:
+                _ = pending_future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
     judgments_list.sort(key=lambda j: j.constraint_id)
     return tuple(judgments_list)
 
 
+def _judge_errors_path(results_root: Path, run_id: str, instance_id: str) -> Path:
+    return results_root / run_id / instance_id / "judge_errors.jsonl"
+
+
+def _record_fatal_error(
+    *,
+    results_root: Path,
+    run_id: str,
+    instance_id: str,
+    constraint_id: str,
+    error: claude_cli_client.ClaudeCliFatalError,
+) -> None:
+    """Persist a structured `judge_errors.jsonl` record and log the failure.
+
+    The user prompt is intentionally omitted from both the log and the file so
+    the patch under judgment never leaks into shared diagnostic surfaces.
+    """
+    record = {
+        "run_id": run_id,
+        "instance_id": instance_id,
+        "constraint_id": constraint_id,
+        "returncode": error.returncode,
+        "stdout": _tail(error.stdout),
+        "stderr": _tail(error.stderr),
+    }
+    logger.error(
+        {
+            "action": "judge_claude_cli_fatal",
+            "results_root": str(results_root),
+            **record,
+        }
+    )
+    path = _judge_errors_path(results_root, run_id, instance_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        _ = handle.write(json.dumps(record, ensure_ascii=False))
+        _ = handle.write("\n")
+
+
+_FATAL_ERROR_TAIL_LIMIT = 4096
+
+
+def _tail(text: str) -> str:
+    if len(text) <= _FATAL_ERROR_TAIL_LIMIT:
+        return text
+    return text[-_FATAL_ERROR_TAIL_LIMIT:]
+
+
 _INSTANCE_JUDGMENT_ADAPTER = pydantic.TypeAdapter(InstanceJudgment)
+_CONSTRAINT_JUDGMENT_ADAPTER = pydantic.TypeAdapter(ConstraintJudgment)
 
 
 def _judgments_path(results_root: Path, run_id: str, instance_id: str) -> Path:
     return results_root / run_id / instance_id / "judgments.json"
+
+
+def _partial_judgments_path(results_root: Path, run_id: str, instance_id: str) -> Path:
+    return results_root / run_id / instance_id / "judgments.partial.json"
 
 
 def _judge_targets_path(results_root: Path, run_id: str, instance_id: str) -> Path:
@@ -528,20 +792,57 @@ def _write_json(path: Path, document: object) -> None:
     )
 
 
-def _load_existing_judgment(
+def _atomic_write_json(path: Path, document: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    serialized = json.dumps(document, indent=2, ensure_ascii=False)
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            _ = handle.write(serialized)
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+def _load_completed_judgments(
     results_root: Path,
     run_id: str,
     instance_id: str,
-) -> InstanceJudgment | None:
-    path = _judgments_path(results_root, run_id, instance_id)
+) -> dict[str, ConstraintJudgment]:
+    """Return ok-only judgments keyed by constraint_id from final and partial files.
+
+    Both `judgments.json` and `judgments.partial.json` are scanned. When the
+    same constraint appears in both, the entry from `judgments.json` wins
+    because it was committed at the end of a complete run.
+    """
+    completed: dict[str, ConstraintJudgment] = {}
+    for path in (
+        _partial_judgments_path(results_root, run_id, instance_id),
+        _judgments_path(results_root, run_id, instance_id),
+    ):
+        for judgment in _read_constraint_judgments(path):
+            if judgment.status == JudgmentStatus.OK:
+                completed[judgment.constraint_id] = judgment
+    return completed
+
+
+def _read_constraint_judgments(path: Path) -> tuple[ConstraintJudgment, ...]:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError, json.JSONDecodeError:
-        return None
-    try:
-        return _INSTANCE_JUDGMENT_ADAPTER.validate_python(document)
-    except pydantic.ValidationError:
-        return None
+        return ()
+    raw_judgments = document.get("judgments") if isinstance(document, dict) else document
+    if not isinstance(raw_judgments, list):
+        return ()
+    parsed: list[ConstraintJudgment] = []
+    for raw in raw_judgments:
+        try:
+            parsed.append(_CONSTRAINT_JUDGMENT_ADAPTER.validate_python(raw))
+        except pydantic.ValidationError:
+            continue
+    return tuple(parsed)
 
 
 def _extract_json_payload(response: str) -> str | None:
@@ -557,10 +858,11 @@ def _extract_json_payload(response: str) -> str | None:
 def _failure_judgment(constraint_id: str, status: JudgmentStatus, rationale: str) -> ConstraintJudgment:
     return ConstraintJudgment(
         constraint_id=constraint_id,
-        verdict=JudgeVerdict.NOT_APPLICABLE,
+        status=status,
+        verdict=JudgeVerdict.NOT_JUDGED,
+        patch_effect=PatchEffect.NOT_JUDGED,
         confidence=0.0,
         rationale=rationale,
-        status=status,
     )
 
 
