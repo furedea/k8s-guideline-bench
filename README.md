@@ -486,6 +486,100 @@ uv run python src/llm_judgment/run_experiment.py \
 
 `--instance-id <pr>` または `--limit N` でサブセット指定可．
 
+### Local server run on sam
+
+sam へデータを移行した後は，データ再構築ではなく実行環境の確認から始める．local 100 PR 実験の spec は `config/experiment_spec_local_100.json` を使う．この spec は `judge_target_policy="gold_scope"` なので，Strategy 側 Judge は gold scope に入った規約だけを評価する．
+
+#### 1. Python / Docker の確認
+
+```sh
+uv sync
+docker build -t k8s-bench-agent -f docker/Dockerfile .
+docker run --rm k8s-bench-agent true
+```
+
+#### 2. Local LLM server を起動
+
+vLLM と SGLang を比較する場合，ポートを分けて起動する．どちらも OpenAI-compatible endpoint として `client_type="openai_compatible"` から呼び出す．
+
+vLLM:
+
+```sh
+export LOCAL_LLM_API_KEY=local-token
+
+vllm serve Qwen/Qwen2.5-Coder-14B-Instruct \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --api-key "$LOCAL_LLM_API_KEY" \
+  --max-model-len 16384 \
+  --gpu-memory-utilization 0.90 \
+  --enable-prefix-caching \
+  --generation-config vllm
+```
+
+SGLang:
+
+```sh
+export LOCAL_LLM_API_KEY=local-token
+
+python -m sglang.launch_server \
+  --model-path Qwen/Qwen2.5-Coder-14B-Instruct \
+  --host 0.0.0.0 \
+  --port 8001 \
+  --api-key "$LOCAL_LLM_API_KEY" \
+  --context-length 16384
+```
+
+`config/experiment_spec_local_100.json` の `judge_config.client.base_url` と `judge_config.model` は，起動した server と model に合わせて変更する．sam 上で experiment も実行する場合，base URL は `http://localhost:8000/v1` のようにする．手元の machine から sam の server を叩く場合は `http://sam:8000/v1` を使う．
+
+#### 3. 疎通確認
+
+```sh
+curl http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer $LOCAL_LLM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-Coder-14B-Instruct",
+    "messages": [{"role": "user", "content": "Return JSON: {\"ok\": true}"}],
+    "max_tokens": 32
+  }'
+```
+
+#### 4. Smoke run
+
+まず 1 PR で Agent 実行，Judge，fair report まで通す．
+
+```sh
+uv run python src/llm_judgment/run_experiment.py \
+  --spec config/experiment_spec_local_100.json \
+  --limit 1
+
+uv run python src/llm_judgment/compute_fair_report.py \
+  --spec config/experiment_spec_local_100.json
+```
+
+#### 5. Small comparison
+
+vLLM と SGLang を比較する場合は，同じ model，同じ 10 PR で wall time，`eval_error`，JSON parse failure，GPU utilization を見る．
+
+```sh
+uv run python src/llm_judgment/run_experiment.py \
+  --spec config/experiment_spec_local_100.json \
+  --limit 10
+```
+
+#### 6. 100 PR run
+
+Smoke と small comparison が通ったら 100 PR を回す．`skip_existing=true` なので中断後も再実行で resume する．
+
+```sh
+uv run python src/llm_judgment/run_experiment.py \
+  --spec config/experiment_spec_local_100.json
+
+uv run python src/llm_judgment/compute_fair_report.py \
+  --spec config/experiment_spec_local_100.json
+```
+
 ### Pilot fair report
 
 通常の集計では，AI が作った差分ごとに「どの規約が今回の変更に関係するか」を判定する．この方法だと，同じ model でも context strategy が変わるだけで評価対象の規約数が変わり，strategy 間比較が歪む可能性がある．
