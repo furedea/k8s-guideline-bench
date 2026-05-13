@@ -54,7 +54,10 @@ def test_mini_swe_agent_wrapper_dependencies_are_provided_by_image() -> None:
     assert "mini-swe-agent" in dockerfile_text
     assert "/usr/local/bin/mini" in dockerfile_text
     assert "mini --help" in dockerfile_text
-    assert "mini -y" in wrapper_text
+    assert "MSWEA_CONFIGURED=1 mini" in wrapper_text
+    assert "--agent-class default" in wrapper_text
+    assert "--exit-immediately" in wrapper_text
+    assert "-y" in wrapper_text
 
 
 def _load_json(path: Path) -> dict[str, Any]:

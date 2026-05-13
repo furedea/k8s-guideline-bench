@@ -28,7 +28,12 @@ function main() {
   : "${OPENAI_API_KEY:?OPENAI_API_KEY is required by LiteLLM}"
 
   cd "${WORKTREE}"
-  mini -y -m "${MODEL_NAME}" -t "$(cat "${PROMPT_PATH}")"
+  MSWEA_CONFIGURED=1 mini \
+    --agent-class default \
+    --exit-immediately \
+    -y \
+    -m "${MODEL_NAME}" \
+    -t "$(cat "${PROMPT_PATH}")"
 }
 
 main "$@"
