@@ -220,6 +220,7 @@ OPENCODE_CONFIG_SCHEMA = "https://opencode.ai/config.json"
 OPENAI_COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible"
 HOST_INTERNAL_NAME = "host.docker.internal"
 HOST_INTERNAL_DOCKER_ARG = f"--add-host={HOST_INTERNAL_NAME}:host-gateway"
+HOST_NETWORK_DOCKER_ARG = "--network=host"
 LOCALHOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
@@ -600,7 +601,7 @@ def _build_opencode_invocation(model: str, docker_config: DockerAgentConfig) -> 
     return BackendInvocation(
         model=_resolve_opencode_model(model, provider),
         env_passthrough=_dedupe_strings((*docker_config.env_passthrough, provider.client.api_key_env or "")),
-        env_args=tuple(_render_openai_compatible_provider_args(model, provider)),
+        env_args=tuple(_render_openai_compatible_provider_args(model, provider, docker_config.docker_args)),
         docker_args=_resolved_opencode_docker_args(docker_config.docker_args, provider),
     )
 
@@ -610,6 +611,8 @@ def _resolved_opencode_docker_args(
     provider: OpenAICompatibleProviderConfig,
 ) -> tuple[str, ...]:
     assert provider.client.base_url is not None
+    if _uses_host_network(docker_args):
+        return docker_args
     if not _requires_host_internal_alias(provider.client.base_url):
         return docker_args
     return _dedupe_strings((*docker_args, HOST_INTERNAL_DOCKER_ARG))
@@ -618,13 +621,16 @@ def _resolved_opencode_docker_args(
 def _render_openai_compatible_provider_args(
     model: str,
     provider: OpenAICompatibleProviderConfig,
+    docker_args: tuple[str, ...],
 ) -> list[str]:
-    return ["-e", f"{OPENCODE_CONFIG_ENV}={_render_openai_compatible_provider_config(model, provider)}"]
+    config_content = _render_openai_compatible_provider_config(model, provider, docker_args)
+    return ["-e", f"{OPENCODE_CONFIG_ENV}={config_content}"]
 
 
 def _render_openai_compatible_provider_config(
     model: str,
     provider: OpenAICompatibleProviderConfig,
+    docker_args: tuple[str, ...],
 ) -> str:
     provider_model = _provider_model_id(model, provider.provider_id)
     rendered = {
@@ -633,7 +639,7 @@ def _render_openai_compatible_provider_config(
             provider.provider_id: {
                 "npm": OPENAI_COMPATIBLE_PACKAGE,
                 "name": provider.name,
-                "options": _render_openai_compatible_provider_options(provider),
+                "options": _render_openai_compatible_provider_options(provider, docker_args),
                 "models": {
                     provider_model: {
                         "name": provider_model,
@@ -651,9 +657,10 @@ def _render_openai_compatible_provider_config(
 
 def _render_openai_compatible_provider_options(
     provider: OpenAICompatibleProviderConfig,
+    docker_args: tuple[str, ...],
 ) -> dict[str, str]:
     assert provider.client.base_url is not None
-    options = {"baseURL": _container_base_url(provider.client.base_url)}
+    options = {"baseURL": _container_base_url(provider.client.base_url, docker_args)}
     if provider.client.api_key_env is not None:
         options["apiKey"] = f"{{env:{provider.client.api_key_env}}}"
     return options
@@ -672,7 +679,9 @@ def _provider_model_id(model: str, provider_id: str) -> str:
     return model
 
 
-def _container_base_url(base_url: str) -> str:
+def _container_base_url(base_url: str, docker_args: tuple[str, ...]) -> str:
+    if _uses_host_network(docker_args):
+        return base_url
     split = urlsplit(base_url)
     if split.hostname not in LOCALHOST_NAMES:
         return base_url
@@ -682,6 +691,10 @@ def _container_base_url(base_url: str) -> str:
 
 def _requires_host_internal_alias(base_url: str) -> bool:
     return urlsplit(base_url).hostname in LOCALHOST_NAMES
+
+
+def _uses_host_network(docker_args: tuple[str, ...]) -> bool:
+    return HOST_NETWORK_DOCKER_ARG in docker_args or ("--network" in docker_args and "host" in docker_args)
 
 
 def _replace_hostname(split: SplitResult, hostname: str) -> str:

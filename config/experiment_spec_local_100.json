@@ -20,7 +20,7 @@
       "image": "k8s-bench-agent",
       "backend": "opencode",
       "agent_command": "opencode run --dangerously-skip-permissions --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
-      "docker_args": [],
+      "docker_args": ["--network=host"],
       "openai_compatible_provider": {
         "provider_id": "sglang-local",
         "name": "SGLang local",
