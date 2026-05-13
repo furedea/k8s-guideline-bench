@@ -703,6 +703,66 @@ def test_run_docker_agentic_instance_keeps_localhost_for_host_network_opencode_p
     assert provider["options"]["baseURL"] == "http://localhost:8001/v1"
 
 
+def test_run_docker_agentic_instance_injects_mini_swe_agent_local_provider_env(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    run_mock = mocker.patch(
+        "agent_runner.subprocess.run",
+        autospec=True,
+        side_effect=_make_successful_fake_run(repo_path, results_root),
+    )
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="Qwen/Qwen3.6-27B-FP8",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent-mini-swe-agent",
+            backend=agent_runner.AgentBackend.MINI_SWE_AGENT,
+            agent_command='mini -y -m "$MODEL" -t "$(cat "$AGENT_PROMPT_PATH")"',
+            docker_args=("--network=host",),
+            openai_compatible_provider=agent_runner.OpenAICompatibleProviderConfig(
+                provider_id="sglang-local",
+                name="SGLang local",
+                client=client_spec.ClientSpec(
+                    client_type=client_spec.ClientType.OPENAI_COMPATIBLE,
+                    api_key_env="LOCAL_LLM_API_KEY",
+                    base_url="http://localhost:8002/v1",
+                ),
+                context_limit=16384,
+                output_limit=4096,
+            ),
+        ),
+    )
+
+    _ = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    docker_command = next(
+        call.args[0] for call in run_mock.call_args_list if call.args[0][:3] == ["docker", "run", "--rm"]
+    )
+    assert "--network=host" in docker_command
+    assert "LOCAL_LLM_API_KEY" in docker_command
+    assert "OPENAI_API_KEY" in docker_command
+    assert "MODEL=openai/Qwen/Qwen3.6-27B-FP8" in docker_command
+    assert "OPENAI_API_BASE=http://localhost:8002/v1" in docker_command
+    assert "OPENAI_BASE_URL=http://localhost:8002/v1" in docker_command
+    assert "MSWEA_COST_TRACKING=ignore_errors" in docker_command
+    assert "k8s-bench-agent-mini-swe-agent" in docker_command
+
+
 def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
     tmp_path: Path,
     mocker: MockerFixture,

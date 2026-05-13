@@ -643,6 +643,65 @@ def test_load_experiment_spec_parses_local_openai_compatible_agent_provider(tmp_
     assert loaded.agent_configs[0].model == "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
 
 
+def test_load_experiment_spec_parses_mini_swe_agent_backend_with_local_provider(tmp_path: Path) -> None:
+    spec_path = tmp_path / "experiment.json"
+    _ = spec_path.write_text(
+        json.dumps(
+            {
+                "datasets_root": "datasets",
+                "results_root": "results/local_100",
+                "repo_path": "kubernetes",
+                "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
+                "agent_matrix": {
+                    "run_id_prefix": "local100_mini",
+                    "models": [
+                        "Qwen/Qwen3.6-27B-FP8",
+                    ],
+                    "context_strategies": [
+                        "no_constraints",
+                    ],
+                    "max_tokens": 4096,
+                    "docker": {
+                        "image": "k8s-bench-agent-mini-swe-agent",
+                        "backend": "mini_swe_agent",
+                        "agent_command": "run-mini-swe-agent",
+                        "openai_compatible_provider": {
+                            "provider_id": "sglang-local",
+                            "name": "SGLang local",
+                            "client": {
+                                "client_type": "openai_compatible",
+                                "api_key_env": "LOCAL_LLM_API_KEY",
+                                "base_url": "http://localhost:8002/v1",
+                            },
+                            "context_limit": 16384,
+                            "output_limit": 4096,
+                        },
+                    },
+                    "skip_existing": True,
+                },
+                "judge_config": {
+                    "model": "sonnet",
+                    "max_tokens": 256,
+                    "system_prompt": "judge",
+                    "client": {
+                        "client_type": "claude_cli",
+                    },
+                    "skip_existing": True,
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = experiment.load_experiment_spec(spec_path)
+
+    docker_config = loaded.agent_configs[0].docker
+    assert docker_config.backend == agent_runner.AgentBackend.MINI_SWE_AGENT
+    assert docker_config.openai_compatible_provider is not None
+    assert docker_config.openai_compatible_provider.client.base_url == "http://localhost:8002/v1"
+    assert loaded.agent_configs[0].run_id == "local100_mini_Qwen_Qwen3_6_27B_FP8_no_constraints"
+
+
 def test_load_experiment_spec_rejects_local_provider_for_custom_cli_backend(tmp_path: Path) -> None:
     spec_path = tmp_path / "experiment.json"
     _ = spec_path.write_text(

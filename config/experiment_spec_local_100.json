@@ -6,7 +6,7 @@
   "instance_limit": 100,
   "judge_target_policy": "gold_scope",
   "agent_matrix": {
-    "run_id_prefix": "local100",
+    "run_id_prefix": "local100_mini",
     "models": [
       "Qwen/Qwen3.6-27B-FP8"
     ],
@@ -15,11 +15,11 @@
       "api_conventions_md",
       "atomic_constraints_73_json"
     ],
-    "max_tokens": 8192,
+    "max_tokens": 4096,
     "docker": {
-      "image": "k8s-bench-agent",
-      "backend": "opencode",
-      "agent_command": "opencode run --dangerously-skip-permissions --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
+      "image": "k8s-bench-agent-mini-swe-agent",
+      "backend": "mini_swe_agent",
+      "agent_command": "run-mini-swe-agent",
       "docker_args": ["--network=host"],
       "openai_compatible_provider": {
         "provider_id": "sglang-local",
@@ -27,10 +27,10 @@
         "client": {
           "client_type": "openai_compatible",
           "api_key_env": "LOCAL_LLM_API_KEY",
-          "base_url": "http://localhost:8001/v1"
+          "base_url": "http://localhost:8002/v1"
         },
-        "context_limit": 8192,
-        "output_limit": 8192
+        "context_limit": 16384,
+        "output_limit": 4096
       }
     },
     "skip_existing": true
@@ -42,7 +42,7 @@
     "client": {
       "client_type": "openai_compatible",
       "api_key_env": "LOCAL_LLM_API_KEY",
-      "base_url": "http://localhost:8001/v1"
+      "base_url": "http://localhost:8002/v1"
     },
     "judge_mode": "reference_based",
     "max_workers": 1,
