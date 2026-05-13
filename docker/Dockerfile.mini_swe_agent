@@ -1,0 +1,41 @@
+# Dockerfile for the mini-SWE-agent execution environment.
+#
+# Build:
+#   docker build -t k8s-bench-agent-mini-swe-agent -f docker/Dockerfile.mini_swe_agent .
+
+# syntax=docker/dockerfile:1.7
+FROM golang:1.26-bookworm
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        make \
+        python3 \
+        python3-pip \
+        python3-venv \
+        unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m venv /opt/mini-swe-agent && \
+    /opt/mini-swe-agent/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/mini-swe-agent/bin/pip install --no-cache-dir mini-swe-agent
+
+COPY docker/run_mini_swe_agent.sh /usr/local/bin/run-mini-swe-agent
+RUN chmod +x /usr/local/bin/run-mini-swe-agent
+
+ARG KUBERNETES_REPO_URL=https://github.com/kubernetes/kubernetes.git
+
+ENV KUBERNETES_CLONE_PATH=/k8s \
+    WORKTREE_PATH=/work \
+    GOCACHE=/tmp/go-build \
+    GOMODCACHE=/tmp/go-mod \
+    GOFLAGS=-mod=vendor \
+    PATH=/opt/mini-swe-agent/bin:$PATH
+
+RUN git clone --filter=blob:none "${KUBERNETES_REPO_URL}" "${KUBERNETES_CLONE_PATH}"
+
+WORKDIR /work
+
+CMD ["bash"]

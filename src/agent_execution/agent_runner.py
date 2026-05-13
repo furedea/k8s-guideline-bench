@@ -52,6 +52,7 @@ class AgentBackend(enum.StrEnum):
 
     CUSTOM_CLI = "custom_cli"
     OPENCODE = "opencode"
+    MINI_SWE_AGENT = "mini_swe_agent"
 
 
 class DockerAgentConfig(base.FrozenModel):
@@ -84,8 +85,9 @@ class DockerAgentConfig(base.FrozenModel):
 
     @pydantic.model_validator(mode="after")
     def validate_backend_config(self) -> Self:
-        if self.openai_compatible_provider is not None and self.backend != AgentBackend.OPENCODE:
-            msg = "`openai_compatible_provider` requires `backend` to be `opencode`."
+        provider_backends = {AgentBackend.OPENCODE, AgentBackend.MINI_SWE_AGENT}
+        if self.openai_compatible_provider is not None and self.backend not in provider_backends:
+            msg = "`openai_compatible_provider` requires `backend` to be `opencode` or `mini_swe_agent`."
             raise ValueError(msg)
         return self
 
@@ -583,6 +585,8 @@ def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
 def _build_backend_invocation(model: str, docker_config: DockerAgentConfig) -> BackendInvocation:
     if docker_config.backend == AgentBackend.OPENCODE:
         return _build_opencode_invocation(model, docker_config)
+    if docker_config.backend == AgentBackend.MINI_SWE_AGENT:
+        return _build_mini_swe_agent_invocation(model, docker_config)
     return BackendInvocation(
         model=model,
         env_passthrough=docker_config.env_passthrough,
@@ -604,6 +608,34 @@ def _build_opencode_invocation(model: str, docker_config: DockerAgentConfig) -> 
         model=_resolve_opencode_model(model, provider),
         env_passthrough=_dedupe_strings((*docker_config.env_passthrough, provider.client.api_key_env or "")),
         env_args=tuple(_render_openai_compatible_provider_args(model, provider, docker_config.docker_args)),
+        docker_args=_resolved_opencode_docker_args(docker_config.docker_args, provider),
+    )
+
+
+def _build_mini_swe_agent_invocation(model: str, docker_config: DockerAgentConfig) -> BackendInvocation:
+    provider = docker_config.openai_compatible_provider
+    if provider is None:
+        return BackendInvocation(
+            model=model,
+            env_passthrough=docker_config.env_passthrough,
+            env_args=(),
+            docker_args=docker_config.docker_args,
+        )
+    assert provider.client.base_url is not None
+    base_url = _container_base_url(provider.client.base_url, docker_config.docker_args)
+    return BackendInvocation(
+        model=_resolve_litellm_openai_model(model),
+        env_passthrough=_dedupe_strings(
+            (*docker_config.env_passthrough, provider.client.api_key_env or "", "OPENAI_API_KEY")
+        ),
+        env_args=(
+            "-e",
+            f"OPENAI_API_BASE={base_url}",
+            "-e",
+            f"OPENAI_BASE_URL={base_url}",
+            "-e",
+            "MSWEA_COST_TRACKING=ignore_errors",
+        ),
         docker_args=_resolved_opencode_docker_args(docker_config.docker_args, provider),
     )
 
@@ -672,6 +704,12 @@ def _resolve_opencode_model(model: str, provider: OpenAICompatibleProviderConfig
     if model.startswith(f"{provider.provider_id}/"):
         return model
     return f"{provider.provider_id}/{model}"
+
+
+def _resolve_litellm_openai_model(model: str) -> str:
+    if model.startswith("openai/"):
+        return model
+    return f"openai/{model}"
 
 
 def _provider_model_id(model: str, provider_id: str) -> str:
