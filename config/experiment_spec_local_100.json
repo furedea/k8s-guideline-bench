@@ -8,7 +8,7 @@
   "agent_matrix": {
     "run_id_prefix": "local100",
     "models": [
-      "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
+      "Qwen/Qwen3.6-27B-FP8"
     ],
     "context_strategies": [
       "no_constraints",
@@ -36,7 +36,7 @@
     "skip_existing": true
   },
   "judge_config": {
-    "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+    "model": "Qwen/Qwen3.6-27B-FP8",
     "max_tokens": 1024,
     "system_prompt": "You are an impartial judge evaluating whether a code patch newly satisfies a single atomic Kubernetes API convention rule. Respond strictly with a JSON object containing `verdict` (compliant | violated | not_applicable), `patch_effect` (applied_by_patch | already_satisfied | not_relevant | unknown), `confidence` (0..1), and `rationale`.",
     "client": {
