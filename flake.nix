@@ -6,7 +6,7 @@
   };
 
   outputs =
-    { self, nixpkgs }:
+    { nixpkgs, ... }:
     let
       system = "aarch64-darwin";
       pkgs = import nixpkgs { inherit system; };
@@ -46,7 +46,10 @@
         packages = with pkgs; [
           quietClaude
           commitlint
+          deadnix
           lefthook
+          nixfmt-rfc-style
+          statix
           uv
         ];
 
