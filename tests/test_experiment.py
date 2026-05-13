@@ -10,6 +10,7 @@ import claude_cli_client
 import client_spec
 import completion_client
 import dataset_builder
+import error
 import experiment
 import judge
 import pr_collection
@@ -601,6 +602,7 @@ def test_load_experiment_spec_parses_local_openai_compatible_agent_provider(tmp_
                     "max_tokens": 8192,
                     "docker": {
                         "image": "k8s-bench-agent",
+                        "backend": "opencode",
                         "agent_command": 'opencode run --model "$MODEL" < "$AGENT_PROMPT_PATH"',
                         "openai_compatible_provider": {
                             "provider_id": "sglang-local",
@@ -633,11 +635,64 @@ def test_load_experiment_spec_parses_local_openai_compatible_agent_provider(tmp_
     loaded = experiment.load_experiment_spec(spec_path)
 
     docker_config = loaded.agent_configs[0].docker
+    assert docker_config.backend == agent_runner.AgentBackend.OPENCODE
     assert docker_config.openai_compatible_provider is not None
     assert docker_config.openai_compatible_provider.provider_id == "sglang-local"
     assert docker_config.openai_compatible_provider.client.client_type == client_spec.ClientType.OPENAI_COMPATIBLE
     assert docker_config.openai_compatible_provider.client.base_url == "http://localhost:8001/v1"
     assert loaded.agent_configs[0].model == "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
+
+
+def test_load_experiment_spec_rejects_local_provider_for_custom_cli_backend(tmp_path: Path) -> None:
+    spec_path = tmp_path / "experiment.json"
+    _ = spec_path.write_text(
+        json.dumps(
+            {
+                "datasets_root": "datasets",
+                "results_root": "results/local_100",
+                "repo_path": "kubernetes",
+                "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
+                "agent_matrix": {
+                    "run_id_prefix": "local100",
+                    "models": [
+                        "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+                    ],
+                    "context_strategies": [
+                        "no_constraints",
+                    ],
+                    "max_tokens": 8192,
+                    "docker": {
+                        "image": "k8s-bench-agent",
+                        "backend": "custom_cli",
+                        "agent_command": 'custom-agent "$AGENT_PROMPT_PATH"',
+                        "openai_compatible_provider": {
+                            "provider_id": "sglang-local",
+                            "name": "SGLang local",
+                            "client": {
+                                "client_type": "openai_compatible",
+                                "api_key_env": "LOCAL_LLM_API_KEY",
+                                "base_url": "http://localhost:8001/v1",
+                            },
+                            "context_limit": 8192,
+                            "output_limit": 8192,
+                        },
+                    },
+                },
+                "judge_config": {
+                    "model": "sonnet",
+                    "max_tokens": 256,
+                    "system_prompt": "judge",
+                    "client": {
+                        "client_type": "claude_cli",
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(error.ConstraintCatalogError, match="Invalid experiment spec"):
+        _ = experiment.load_experiment_spec(spec_path)
 
 
 def test_experiment_spec_defaults_gold_scope_judge_config_to_strategy_judge_with_patch_only_mode(

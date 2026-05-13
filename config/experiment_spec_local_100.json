@@ -18,6 +18,7 @@
     "max_tokens": 8192,
     "docker": {
       "image": "k8s-bench-agent",
+      "backend": "opencode",
       "agent_command": "opencode run --dangerously-skip-permissions --model \"$MODEL\" < \"$AGENT_PROMPT_PATH\"",
       "docker_args": [],
       "openai_compatible_provider": {

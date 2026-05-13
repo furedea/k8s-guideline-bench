@@ -534,6 +534,7 @@ def test_run_docker_agentic_instance_injects_local_opencode_provider_config(
         context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
         docker=agent_runner.DockerAgentConfig(
             image="k8s-bench-agent",
+            backend=agent_runner.AgentBackend.OPENCODE,
             agent_command='opencode run --model "$MODEL" < "$AGENT_PROMPT_PATH"',
             openai_compatible_provider=agent_runner.OpenAICompatibleProviderConfig(
                 provider_id="sglang-local",

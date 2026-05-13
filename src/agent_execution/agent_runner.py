@@ -47,10 +47,18 @@ class WorktreeStrategy(enum.StrEnum):
     GIT_WORKTREE = "git_worktree"
 
 
+class AgentBackend(enum.StrEnum):
+    """How the Docker command is adapted for an agent runtime."""
+
+    CUSTOM_CLI = "custom_cli"
+    OPENCODE = "opencode"
+
+
 class DockerAgentConfig(base.FrozenModel):
     """Docker-backed agentic execution configuration."""
 
     image: str
+    backend: AgentBackend = AgentBackend.CUSTOM_CLI
     agent_command: str
     docker_args: tuple[str, ...] = ()
     env_passthrough: tuple[str, ...] = ("OPENCODE_API_KEY",)
@@ -66,6 +74,20 @@ class DockerAgentConfig(base.FrozenModel):
         if isinstance(value, list):
             return tuple(cast("list[str]", value))
         return value
+
+    @pydantic.field_validator("backend", mode="before")
+    @classmethod
+    def validate_backend(cls, value: object) -> object:
+        if isinstance(value, str):
+            return AgentBackend(value)
+        return value
+
+    @pydantic.model_validator(mode="after")
+    def validate_backend_config(self) -> Self:
+        if self.openai_compatible_provider is not None and self.backend != AgentBackend.OPENCODE:
+            msg = "`openai_compatible_provider` requires `backend` to be `opencode`."
+            raise ValueError(msg)
+        return self
 
 
 class OpenAICompatibleProviderConfig(base.FrozenModel):
@@ -177,6 +199,15 @@ class AgentRunMetadata(base.FrozenModel):
     predicted_patch_bytes: int
     attached_context_files: tuple[str, ...]
     exit_code: int | None = None
+
+
+class BackendInvocation(base.FrozenModel):
+    """Docker command fragments derived from the selected agent backend."""
+
+    model: str
+    env_passthrough: tuple[str, ...]
+    env_args: tuple[str, ...]
+    docker_args: tuple[str, ...]
 
 
 DOCKER_PROMPT_FILENAME = "prompt.txt"
@@ -496,7 +527,7 @@ def _run_docker_agent_command(
     task_path = f"{docker_config.bench_context_path}/{DOCKER_TASK_FILENAME}"
     constraints_path = f"{docker_config.bench_context_path}/{DOCKER_CONSTRAINTS_FILENAME}"
     shell_script = f"set -euxCo pipefail\n{docker_config.agent_command}"
-    resolved_model = _resolve_agent_model(config.model, docker_config)
+    backend_invocation = _build_backend_invocation(config.model, docker_config)
     command = [
         "docker",
         "run",
@@ -510,18 +541,18 @@ def _run_docker_agent_command(
         "-e",
         f"CONSTRAINTS_PATH={constraints_path}",
         "-e",
-        f"MODEL={resolved_model}",
+        f"MODEL={backend_invocation.model}",
         "-e",
         f"MAX_TOKENS={config.max_tokens}",
-        *_render_env_passthrough_args(_resolved_env_passthrough(docker_config)),
-        *_render_openai_compatible_provider_args(config.model, docker_config),
+        *_render_env_passthrough_args(backend_invocation.env_passthrough),
+        *backend_invocation.env_args,
         "-v",
         f"{worktree_dir.resolve()}:{docker_config.worktree_path}",
         "-v",
         f"{context_dir.resolve()}:{docker_config.bench_context_path}:ro",
         "-v",
         f"{output_dir.resolve()}:{docker_config.output_path}",
-        *_resolved_docker_args(docker_config),
+        *backend_invocation.docker_args,
         docker_config.image,
         "bash",
         "-lc",
@@ -546,26 +577,48 @@ def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
     return args
 
 
-def _resolved_env_passthrough(docker_config: DockerAgentConfig) -> tuple[str, ...]:
-    provider = docker_config.openai_compatible_provider
-    if provider is None or provider.client.api_key_env is None:
-        return docker_config.env_passthrough
-    return _dedupe_strings((*docker_config.env_passthrough, provider.client.api_key_env))
+def _build_backend_invocation(model: str, docker_config: DockerAgentConfig) -> BackendInvocation:
+    if docker_config.backend == AgentBackend.OPENCODE:
+        return _build_opencode_invocation(model, docker_config)
+    return BackendInvocation(
+        model=model,
+        env_passthrough=docker_config.env_passthrough,
+        env_args=(),
+        docker_args=docker_config.docker_args,
+    )
 
 
-def _resolved_docker_args(docker_config: DockerAgentConfig) -> tuple[str, ...]:
-    provider = docker_config.openai_compatible_provider
-    if provider is None or provider.client.base_url is None:
-        return docker_config.docker_args
-    if not _requires_host_internal_alias(provider.client.base_url):
-        return docker_config.docker_args
-    return _dedupe_strings((*docker_config.docker_args, HOST_INTERNAL_DOCKER_ARG))
-
-
-def _render_openai_compatible_provider_args(model: str, docker_config: DockerAgentConfig) -> list[str]:
+def _build_opencode_invocation(model: str, docker_config: DockerAgentConfig) -> BackendInvocation:
     provider = docker_config.openai_compatible_provider
     if provider is None:
-        return []
+        return BackendInvocation(
+            model=model,
+            env_passthrough=docker_config.env_passthrough,
+            env_args=(),
+            docker_args=docker_config.docker_args,
+        )
+    return BackendInvocation(
+        model=_resolve_opencode_model(model, provider),
+        env_passthrough=_dedupe_strings((*docker_config.env_passthrough, provider.client.api_key_env or "")),
+        env_args=tuple(_render_openai_compatible_provider_args(model, provider)),
+        docker_args=_resolved_opencode_docker_args(docker_config.docker_args, provider),
+    )
+
+
+def _resolved_opencode_docker_args(
+    docker_args: tuple[str, ...],
+    provider: OpenAICompatibleProviderConfig,
+) -> tuple[str, ...]:
+    assert provider.client.base_url is not None
+    if not _requires_host_internal_alias(provider.client.base_url):
+        return docker_args
+    return _dedupe_strings((*docker_args, HOST_INTERNAL_DOCKER_ARG))
+
+
+def _render_openai_compatible_provider_args(
+    model: str,
+    provider: OpenAICompatibleProviderConfig,
+) -> list[str]:
     return ["-e", f"{OPENCODE_CONFIG_ENV}={_render_openai_compatible_provider_config(model, provider)}"]
 
 
@@ -606,9 +659,8 @@ def _render_openai_compatible_provider_options(
     return options
 
 
-def _resolve_agent_model(model: str, docker_config: DockerAgentConfig) -> str:
-    provider = docker_config.openai_compatible_provider
-    if provider is None or model.startswith(f"{provider.provider_id}/"):
+def _resolve_opencode_model(model: str, provider: OpenAICompatibleProviderConfig) -> str:
+    if model.startswith(f"{provider.provider_id}/"):
         return model
     return f"{provider.provider_id}/{model}"
 
@@ -641,7 +693,7 @@ def _replace_hostname(split: SplitResult, hostname: str) -> str:
 
 
 def _dedupe_strings(values: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(values))
+    return tuple(dict.fromkeys(value for value in values if value))
 
 
 def _prepare_git_worktree(repo_path: Path, worktree_dir: Path, base_sha: str) -> None:
