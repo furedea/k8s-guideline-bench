@@ -430,6 +430,76 @@ def test_run_docker_agentic_instance_records_failures_without_raising(
     assert (output_dir / "worktree").exists()
 
 
+def test_run_docker_agentic_instance_records_opencode_error_with_zero_exit_as_failure(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = capture_output, text, check, timeout
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="",
+            stderr="Error: Bad Request: The input is longer than the model's context length.",
+        )
+
+    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="Qwen/Qwen3.6-27B-FP8",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent",
+            backend=agent_runner.AgentBackend.OPENCODE,
+            agent_command='opencode run --model "$MODEL" < "$AGENT_PROMPT_PATH"',
+        ),
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    output_dir = results_root / "docker-run" / "42"
+    assert result.status == agent_runner.AgentRunStatus.FAILED
+    assert result.predicted_patch == ""
+    raw_response = (output_dir / "raw_response.txt").read_text(encoding="utf-8")
+    assert "exit_code=1" in raw_response
+    assert "OpenCode reported an error despite exiting with code 0." in raw_response
+    metadata = (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+    assert '"status": "failed"' in metadata
+    assert '"exit_code": 1' in metadata
+
+
 def test_run_docker_agentic_instance_skips_when_previous_run_metadata_marks_completed(
     tmp_path: Path,
     mocker: MockerFixture,

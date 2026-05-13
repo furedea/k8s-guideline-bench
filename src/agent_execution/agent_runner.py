@@ -215,6 +215,7 @@ DOCKER_TASK_FILENAME = "task.json"
 DOCKER_CONSTRAINTS_FILENAME = "constraints.json"
 RUN_METADATA_FILENAME = "run_metadata.json"
 AGENT_TIMEOUT_EXIT_CODE = 124
+AGENT_REPORTED_ERROR_EXIT_CODE = 1
 OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
 OPENCODE_CONFIG_SCHEMA = "https://opencode.ai/config.json"
 OPENAI_COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible"
@@ -427,6 +428,7 @@ def _run_docker_agent_on_instance(
         context_dir=context_dir,
         worktree_dir=worktree_dir,
     )
+    completed = _normalize_agent_completed_process(completed, config)
     raw_response = _render_docker_raw_response(completed)
     _ = (output_dir / "raw_response.txt").write_text(raw_response, encoding="utf-8")
     if completed.returncode != 0:
@@ -864,6 +866,31 @@ def _completed_process_from_timeout(
         stdout="",
         stderr=f"agent timed out after {timeout_seconds}s",
     )
+
+
+def _normalize_agent_completed_process(
+    completed: subprocess.CompletedProcess[str],
+    config: AgentRunConfig,
+) -> subprocess.CompletedProcess[str]:
+    if config.docker.backend != AgentBackend.OPENCODE or completed.returncode != 0:
+        return completed
+    if not _opencode_reported_error(completed.stderr):
+        return completed
+    return subprocess.CompletedProcess(
+        args=completed.args,
+        returncode=AGENT_REPORTED_ERROR_EXIT_CODE,
+        stdout=completed.stdout,
+        stderr="\n".join(
+            [
+                completed.stderr.rstrip("\n"),
+                "OpenCode reported an error despite exiting with code 0.",
+            ],
+        ),
+    )
+
+
+def _opencode_reported_error(stderr: str) -> bool:
+    return any(line.startswith("Error: ") for line in stderr.splitlines())
 
 
 def _render_docker_raw_response(completed: subprocess.CompletedProcess[str]) -> str:
