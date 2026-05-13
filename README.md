@@ -34,6 +34,14 @@
 | 3 | Agent 実行 | `src/agent_execution/` | (Stage 4 から呼び出し) | `base/` + 規約 → `predicted_patch.diff` |
 | 4 | LLM-as-a-Judge | `src/llm_judgment/` | `uv run python src/llm_judgment/run_experiment.py --spec config/experiment_spec_pilot.json` | `predicted_patch.diff` + 規約 → `judgments.json` + 集計 |
 
+通常の実験実行では，各段階を手で順に呼ばず，`src/run_benchmark.py` を入口にできる．この CLI は dataset に `gold_patch.diff` が揃っていなければ dataset を構築し，gold scope が不足していれば gold patch を judge し，Agent/Judge 実験を実行して最後に `fair_report.json` を更新する．
+
+```sh
+uv run python src/run_benchmark.py \
+  --dataset-spec config/dataset_spec.json \
+  --experiment-spec config/experiment_spec_local_100.json
+```
+
 `CompletionClient` Protocol に沿って Anthropic / OpenAI 互換クライアントを実装．テスト時は Protocol に適合する fake client を注入．
 
 ### 成果物のディレクトリ構造
@@ -422,6 +430,7 @@ Agent の標準出力は diff と見なさない．Agent が container 内の wo
 │       ├── run_experiment.py            # CLI エントリポイント
 │       ├── experiment.py
 │       └── judge.py
+├── src/run_benchmark.py                 # dataset → gold scope → experiment → fair report orchestration
 ├── docker/Dockerfile                     # opencode-go agent 実行 image
 ├── docker/Dockerfile.mini_swe_agent      # mini-SWE-agent 実行 image
 ├── tests/                               # pytest (src/<stage>/ に pythonpath 通し済み)
