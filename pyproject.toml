@@ -29,6 +29,49 @@ pythonpath = [
 ]
 testpaths = ["tests"]
 
+[tool.deptry]
+ignore_notebooks = true
+known_first_party = [
+  "agent_runner",
+  "anthropic_client",
+  "atomic_constraint",
+  "base",
+  "build_dataset",
+  "claude_cli_client",
+  "client_spec",
+  "completion_client",
+  "completion_client_factory",
+  "compute_fair_report",
+  "dataset_builder",
+  "dataset_spec",
+  "dataset_store",
+  "diff_hunk_classification",
+  "error",
+  "experiment",
+  "fair_summary",
+  "git_repository",
+  "gold_scope",
+  "judge",
+  "main",
+  "normative_audit",
+  "normative_constraint",
+  "openai_compatible_client",
+  "pr_body",
+  "pr_collection",
+  "project_paths",
+  "run_experiment",
+  "run_gold_scope",
+  "source_selection",
+  "source_selection_config",
+  "verification",
+]
+
+[tool.vulture]
+paths = ["src", "tests"]
+min_confidence = 100
+sort_by_size = true
+exclude = [".venv", "build", "dist"]
+
 [tool.uv]
 managed = true
 default-groups = ["lint", "typecheck", "test"]
