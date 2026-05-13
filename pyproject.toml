@@ -61,6 +61,7 @@ known_first_party = [
   "pr_collection",
   "project_paths",
   "run_experiment",
+  "run_benchmark",
   "run_gold_scope",
   "source_selection",
   "source_selection_config",
