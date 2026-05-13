@@ -7,10 +7,12 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import cast
+from typing import Self, cast
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import atomic_constraint
 import base
+import client_spec
 import dataset_builder
 import pr_body
 import pydantic
@@ -52,6 +54,7 @@ class DockerAgentConfig(base.FrozenModel):
     agent_command: str
     docker_args: tuple[str, ...] = ()
     env_passthrough: tuple[str, ...] = ("OPENCODE_API_KEY",)
+    openai_compatible_provider: OpenAICompatibleProviderConfig | None = None
     worktree_path: str = "/work"
     bench_context_path: str = "/bench"
     output_path: str = "/out"
@@ -63,6 +66,29 @@ class DockerAgentConfig(base.FrozenModel):
         if isinstance(value, list):
             return tuple(cast("list[str]", value))
         return value
+
+
+class OpenAICompatibleProviderConfig(base.FrozenModel):
+    """Custom OpenCode provider backed by an OpenAI-compatible endpoint."""
+
+    provider_id: str
+    name: str
+    client: client_spec.ClientSpec
+    context_limit: int
+    output_limit: int
+
+    @pydantic.model_validator(mode="after")
+    def validate_client(self) -> Self:
+        if self.client.client_type != client_spec.ClientType.OPENAI_COMPATIBLE:
+            msg = "`openai_compatible_provider.client.client_type` must be `openai_compatible`."
+            raise ValueError(msg)
+        if self.client.base_url is None:
+            msg = "`openai_compatible_provider.client.base_url` is required."
+            raise ValueError(msg)
+        if self.client.api_key_env is None:
+            msg = "`openai_compatible_provider.client.api_key_env` is required."
+            raise ValueError(msg)
+        return self
 
 
 class AttachedContextFile(base.FrozenModel):
@@ -158,6 +184,12 @@ DOCKER_TASK_FILENAME = "task.json"
 DOCKER_CONSTRAINTS_FILENAME = "constraints.json"
 RUN_METADATA_FILENAME = "run_metadata.json"
 AGENT_TIMEOUT_EXIT_CODE = 124
+OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
+OPENCODE_CONFIG_SCHEMA = "https://opencode.ai/config.json"
+OPENAI_COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible"
+HOST_INTERNAL_NAME = "host.docker.internal"
+HOST_INTERNAL_DOCKER_ARG = f"--add-host={HOST_INTERNAL_NAME}:host-gateway"
+LOCALHOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def build_agentic_workspace_prompt(
@@ -464,6 +496,7 @@ def _run_docker_agent_command(
     task_path = f"{docker_config.bench_context_path}/{DOCKER_TASK_FILENAME}"
     constraints_path = f"{docker_config.bench_context_path}/{DOCKER_CONSTRAINTS_FILENAME}"
     shell_script = f"set -euxCo pipefail\n{docker_config.agent_command}"
+    resolved_model = _resolve_agent_model(config.model, docker_config)
     command = [
         "docker",
         "run",
@@ -477,17 +510,18 @@ def _run_docker_agent_command(
         "-e",
         f"CONSTRAINTS_PATH={constraints_path}",
         "-e",
-        f"MODEL={config.model}",
+        f"MODEL={resolved_model}",
         "-e",
         f"MAX_TOKENS={config.max_tokens}",
-        *_render_env_passthrough_args(docker_config.env_passthrough),
+        *_render_env_passthrough_args(_resolved_env_passthrough(docker_config)),
+        *_render_openai_compatible_provider_args(config.model, docker_config),
         "-v",
         f"{worktree_dir.resolve()}:{docker_config.worktree_path}",
         "-v",
         f"{context_dir.resolve()}:{docker_config.bench_context_path}:ro",
         "-v",
         f"{output_dir.resolve()}:{docker_config.output_path}",
-        *docker_config.docker_args,
+        *_resolved_docker_args(docker_config),
         docker_config.image,
         "bash",
         "-lc",
@@ -510,6 +544,104 @@ def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
     for env_name in env_names:
         args.extend(("-e", env_name))
     return args
+
+
+def _resolved_env_passthrough(docker_config: DockerAgentConfig) -> tuple[str, ...]:
+    provider = docker_config.openai_compatible_provider
+    if provider is None or provider.client.api_key_env is None:
+        return docker_config.env_passthrough
+    return _dedupe_strings((*docker_config.env_passthrough, provider.client.api_key_env))
+
+
+def _resolved_docker_args(docker_config: DockerAgentConfig) -> tuple[str, ...]:
+    provider = docker_config.openai_compatible_provider
+    if provider is None or provider.client.base_url is None:
+        return docker_config.docker_args
+    if not _requires_host_internal_alias(provider.client.base_url):
+        return docker_config.docker_args
+    return _dedupe_strings((*docker_config.docker_args, HOST_INTERNAL_DOCKER_ARG))
+
+
+def _render_openai_compatible_provider_args(model: str, docker_config: DockerAgentConfig) -> list[str]:
+    provider = docker_config.openai_compatible_provider
+    if provider is None:
+        return []
+    return ["-e", f"{OPENCODE_CONFIG_ENV}={_render_openai_compatible_provider_config(model, provider)}"]
+
+
+def _render_openai_compatible_provider_config(
+    model: str,
+    provider: OpenAICompatibleProviderConfig,
+) -> str:
+    provider_model = _provider_model_id(model, provider.provider_id)
+    rendered = {
+        "$schema": OPENCODE_CONFIG_SCHEMA,
+        "provider": {
+            provider.provider_id: {
+                "npm": OPENAI_COMPATIBLE_PACKAGE,
+                "name": provider.name,
+                "options": _render_openai_compatible_provider_options(provider),
+                "models": {
+                    provider_model: {
+                        "name": provider_model,
+                        "limit": {
+                            "context": provider.context_limit,
+                            "output": provider.output_limit,
+                        },
+                    },
+                },
+            },
+        },
+    }
+    return json.dumps(rendered, separators=(",", ":"))
+
+
+def _render_openai_compatible_provider_options(
+    provider: OpenAICompatibleProviderConfig,
+) -> dict[str, str]:
+    assert provider.client.base_url is not None
+    options = {"baseURL": _container_base_url(provider.client.base_url)}
+    if provider.client.api_key_env is not None:
+        options["apiKey"] = f"{{env:{provider.client.api_key_env}}}"
+    return options
+
+
+def _resolve_agent_model(model: str, docker_config: DockerAgentConfig) -> str:
+    provider = docker_config.openai_compatible_provider
+    if provider is None or model.startswith(f"{provider.provider_id}/"):
+        return model
+    return f"{provider.provider_id}/{model}"
+
+
+def _provider_model_id(model: str, provider_id: str) -> str:
+    prefix = f"{provider_id}/"
+    if model.startswith(prefix):
+        return model.removeprefix(prefix)
+    return model
+
+
+def _container_base_url(base_url: str) -> str:
+    split = urlsplit(base_url)
+    if split.hostname not in LOCALHOST_NAMES:
+        return base_url
+    netloc = _replace_hostname(split, HOST_INTERNAL_NAME)
+    return urlunsplit(split._replace(netloc=netloc))
+
+
+def _requires_host_internal_alias(base_url: str) -> bool:
+    return urlsplit(base_url).hostname in LOCALHOST_NAMES
+
+
+def _replace_hostname(split: SplitResult, hostname: str) -> str:
+    port = f":{split.port}" if split.port is not None else ""
+    if split.username is None:
+        return f"{hostname}{port}"
+    password = f":{split.password}" if split.password is not None else ""
+    return f"{split.username}{password}@{hostname}{port}"
+
+
+def _dedupe_strings(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
 
 
 def _prepare_git_worktree(repo_path: Path, worktree_dir: Path, base_sha: str) -> None:

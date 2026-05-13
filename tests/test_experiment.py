@@ -581,6 +581,65 @@ def test_load_experiment_spec_expands_agent_matrix(tmp_path: Path) -> None:
     assert atomic.context_files[0].bench_path == "api_conventions_atomic_constraints.json"
 
 
+def test_load_experiment_spec_parses_local_openai_compatible_agent_provider(tmp_path: Path) -> None:
+    spec_path = tmp_path / "experiment.json"
+    _ = spec_path.write_text(
+        json.dumps(
+            {
+                "datasets_root": "datasets",
+                "results_root": "results/local_100",
+                "repo_path": "kubernetes",
+                "constraints_file": "constraints/api_conventions_atomic_constraints_73.json",
+                "agent_matrix": {
+                    "run_id_prefix": "local100",
+                    "models": [
+                        "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+                    ],
+                    "context_strategies": [
+                        "no_constraints",
+                    ],
+                    "max_tokens": 8192,
+                    "docker": {
+                        "image": "k8s-bench-agent",
+                        "agent_command": 'opencode run --model "$MODEL" < "$AGENT_PROMPT_PATH"',
+                        "openai_compatible_provider": {
+                            "provider_id": "sglang-local",
+                            "name": "SGLang local",
+                            "client": {
+                                "client_type": "openai_compatible",
+                                "api_key_env": "LOCAL_LLM_API_KEY",
+                                "base_url": "http://localhost:8001/v1",
+                            },
+                            "context_limit": 8192,
+                            "output_limit": 8192,
+                        },
+                    },
+                    "skip_existing": True,
+                },
+                "judge_config": {
+                    "model": "sonnet",
+                    "max_tokens": 256,
+                    "system_prompt": "judge",
+                    "client": {
+                        "client_type": "claude_cli",
+                    },
+                    "skip_existing": True,
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = experiment.load_experiment_spec(spec_path)
+
+    docker_config = loaded.agent_configs[0].docker
+    assert docker_config.openai_compatible_provider is not None
+    assert docker_config.openai_compatible_provider.provider_id == "sglang-local"
+    assert docker_config.openai_compatible_provider.client.client_type == client_spec.ClientType.OPENAI_COMPATIBLE
+    assert docker_config.openai_compatible_provider.client.base_url == "http://localhost:8001/v1"
+    assert loaded.agent_configs[0].model == "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8"
+
+
 def test_experiment_spec_defaults_gold_scope_judge_config_to_strategy_judge_with_patch_only_mode(
     tmp_path: Path,
 ) -> None:
