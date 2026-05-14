@@ -170,36 +170,97 @@ class ExperimentReport(base.FrozenModel):
         return value
 
 
+type AgentRunBatch = tuple[str, tuple[agent_runner.AgentRunResult, ...]]
+
+
 def run_experiment(
     spec: ExperimentSpec,
     instances: tuple[dataset_builder.DatasetInstance, ...],
     client_factory: ClientFactory,
 ) -> ExperimentReport:
-    """Run every agent config against the given dataset and judge each result.
+    """Run every agent config against the given dataset and judge each result."""
+    agent_batches = run_agent_runs(spec, instances)
+    return _run_judgment(spec, instances, client_factory, agent_batches=agent_batches)
 
-    The judge client is instantiated once and shared across runs so subscription
-    quotas are not burned by redundant factory calls.
+
+def run_agent_runs(
+    spec: ExperimentSpec,
+    instances: tuple[dataset_builder.DatasetInstance, ...],
+) -> tuple[AgentRunBatch, ...]:
+    """Run every agent config against the given dataset and persist agent artifacts."""
+    constraints = atomic_constraint.load_atomic_constraints(spec.constraints_file)
+    logger.info(
+        {
+            "action": "agent_runs_start",
+            "agent_runs": len(spec.agent_configs),
+            "instances": len(instances),
+            "constraints": len(constraints),
+        }
+    )
+    return tuple(
+        (
+            agent_config.run_id,
+            agent_runner.run_agent_on_instances(
+                instances=instances,
+                constraints=constraints,
+                config=agent_config,
+                results_root=spec.results_root,
+                repo_path=spec.repo_path,
+            ),
+        )
+        for agent_config in spec.agent_configs
+    )
+
+
+def run_judgment(
+    spec: ExperimentSpec,
+    instances: tuple[dataset_builder.DatasetInstance, ...],
+    client_factory: ClientFactory,
+) -> ExperimentReport:
+    """Judge existing agent artifacts for every agent config.
+
+    This stage is intentionally separate from agent execution so judge endpoints
+    and costs can be controlled independently. Missing gold scope in
+    ``gold_scope`` mode fails fast instead of being generated implicitly.
     """
+    return _run_judgment(spec, instances, client_factory, agent_batches=None)
+
+
+def _run_judgment(
+    spec: ExperimentSpec,
+    instances: tuple[dataset_builder.DatasetInstance, ...],
+    client_factory: ClientFactory,
+    *,
+    agent_batches: tuple[AgentRunBatch, ...] | None,
+) -> ExperimentReport:
+    """Judge existing or freshly returned agent results."""
     constraints = atomic_constraint.load_atomic_constraints(spec.constraints_file)
     judge_client = client_factory(spec.judge_config.client)
     instance_ids = tuple(str(instance.detail.pr_number) for instance in instances)
     gold_patches = tuple(_load_gold_patch(instance) for instance in instances)
+    _validate_gold_scope_ready(spec, instance_ids)
     logger.info(
         {
-            "action": "experiment_start",
+            "action": "judgment_start",
             "agent_runs": len(spec.agent_configs),
             "instances": len(instances),
             "constraints": len(constraints),
         }
     )
     runs = tuple(
-        _execute_run(
+        _judge_run(
             spec=spec,
             instances=instances,
             instance_ids=instance_ids,
             gold_patches=gold_patches,
             constraints=constraints,
             agent_config=agent_config,
+            agent_results=_agent_results_for_run(
+                spec.results_root,
+                agent_config.run_id,
+                instances,
+                agent_batches,
+            ),
             judge_client=judge_client,
             run_index=run_index,
             total_runs=len(spec.agent_configs),
@@ -279,13 +340,14 @@ def load_experiment_spec(spec_path: Path) -> ExperimentSpec:
         ) from validation_error
 
 
-def _execute_run(
+def _judge_run(
     spec: ExperimentSpec,
     instances: tuple[dataset_builder.DatasetInstance, ...],
     instance_ids: tuple[str, ...],
     gold_patches: tuple[str, ...],
     constraints: tuple[atomic_constraint.AtomicConstraint, ...],
     agent_config: agent_runner.AgentRunConfig,
+    agent_results: tuple[agent_runner.AgentRunResult, ...],
     judge_client: completion_client.CompletionClient,
     run_index: int,
     total_runs: int,
@@ -299,13 +361,6 @@ def _execute_run(
             "model": agent_config.model,
             "context_strategy": agent_config.context_strategy.value,
         }
-    )
-    agent_results = agent_runner.run_agent_on_instances(
-        instances=instances,
-        constraints=constraints,
-        config=agent_config,
-        results_root=spec.results_root,
-        repo_path=spec.repo_path,
     )
     judged_inputs = tuple(
         (instance, gold_patch, agent_result)
@@ -368,6 +423,64 @@ def _execute_run(
         instances_with_test_failure=instance_status_counts[judge.JudgmentStatus.TEST_FAILURE],
         instances_with_api_failure=instance_status_counts[judge.JudgmentStatus.API_FAILURE],
     )
+
+
+def _agent_results_for_run(
+    results_root: Path,
+    run_id: str,
+    instances: tuple[dataset_builder.DatasetInstance, ...],
+    agent_batches: tuple[AgentRunBatch, ...] | None,
+) -> tuple[agent_runner.AgentRunResult, ...]:
+    if agent_batches is None:
+        return _load_agent_run_results(results_root, run_id, instances)
+    for batch_run_id, batch_results in agent_batches:
+        if batch_run_id == run_id:
+            return batch_results
+    return _load_agent_run_results(results_root, run_id, instances)
+
+
+def _load_agent_run_results(
+    results_root: Path,
+    run_id: str,
+    instances: tuple[dataset_builder.DatasetInstance, ...],
+) -> tuple[agent_runner.AgentRunResult, ...]:
+    return tuple(
+        _load_agent_run_result(results_root / run_id / str(instance.detail.pr_number), run_id)
+        for instance in instances
+    )
+
+
+def _load_agent_run_result(output_dir: Path, run_id: str) -> agent_runner.AgentRunResult:
+    metadata_path = output_dir / agent_runner.RUN_METADATA_FILENAME
+    try:
+        metadata = agent_runner.AgentRunMetadata.model_validate_json(metadata_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return agent_runner.AgentRunResult(
+            run_id=run_id,
+            predicted_patch="",
+            status=agent_runner.AgentRunStatus.FAILED,
+        )
+    predicted_patch = (output_dir / "predicted_patch.diff").read_text(encoding="utf-8")
+    return agent_runner.AgentRunResult(
+        run_id=run_id,
+        predicted_patch=predicted_patch,
+        status=metadata.status,
+    )
+
+
+def _validate_gold_scope_ready(spec: ExperimentSpec, instance_ids: tuple[str, ...]) -> None:
+    if spec.judge_target_policy != JudgeTargetPolicy.GOLD_SCOPE:
+        return
+    missing = [
+        instance_id
+        for instance_id in instance_ids
+        if not (spec.results_root / gold_scope.GOLD_SCOPE_RUN_ID / instance_id / "judgments.json").is_file()
+    ]
+    if missing:
+        sample = ", ".join(missing[:5])
+        raise error.ConstraintCatalogError(
+            f"Gold scope is required before judgment for {len(missing)} instance(s): {sample}",
+        )
 
 
 def _judge_agent_result(

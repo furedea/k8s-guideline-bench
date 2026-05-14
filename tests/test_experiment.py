@@ -211,6 +211,75 @@ def test_run_experiment_builds_only_judge_client_for_agent_runs(
     assert call_count == 1
 
 
+def test_run_agent_runs_executes_agents_without_building_judge_client(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    spec = _make_experiment_spec(tmp_path)
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+    run_agents = mocker.patch(
+        "agent_runner.run_agent_on_instances",
+        autospec=True,
+        return_value=(agent_runner.AgentRunResult(run_id="run-001", predicted_patch="diff\n"),),
+    )
+
+    results = experiment.run_agent_runs(spec, instances)
+
+    assert tuple(results) == (("run-001", (agent_runner.AgentRunResult(run_id="run-001", predicted_patch="diff\n"),)),)
+    run_agents.assert_called_once()
+    assert not (spec.results_root / "experiment_report.json").exists()
+
+
+def test_run_judgment_judges_existing_agent_results_without_running_agents(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    spec = _make_experiment_spec(tmp_path)
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+    run_dir = spec.results_root / "run-001" / "42"
+    run_dir.mkdir(parents=True)
+    _ = (run_dir / "predicted_patch.diff").write_text("diff\n", encoding="utf-8")
+    _ = (run_dir / "run_metadata.json").write_text(
+        json.dumps(
+            {
+                "status": "completed",
+                "model": "agent",
+                "context_strategy": "no_constraints",
+                "pr_number": 42,
+                "started_at": "2026-03-01T00:00:00+00:00",
+                "finished_at": "2026-03-01T00:00:01+00:00",
+                "duration_seconds": 1.0,
+                "predicted_patch_bytes": 5,
+                "attached_context_files": [],
+                "exit_code": 0,
+            },
+        ),
+        encoding="utf-8",
+    )
+    run_agents = mocker.patch("agent_runner.run_agent_on_instances", autospec=True)
+
+    report = experiment.run_judgment(spec, instances, client_factory=_stub_factory)
+
+    run_agents.assert_not_called()
+    run = report.runs[0]
+    assert run.run_id == "run-001"
+    assert run.agent_completed == 1
+    assert run.summary.total == 3
+    assert (spec.results_root / "run-001" / "42" / "judgments.json").exists()
+
+
+def test_run_judgment_fails_fast_when_gold_scope_policy_lacks_gold_scope(
+    tmp_path: Path,
+) -> None:
+    spec = _make_experiment_spec(tmp_path).model_copy(
+        update={"judge_target_policy": experiment.JudgeTargetPolicy.GOLD_SCOPE},
+    )
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+
+    with pytest.raises(error.ConstraintCatalogError, match="Gold scope is required"):
+        _ = experiment.run_judgment(spec, instances, client_factory=_stub_factory)
+
+
 def test_run_experiment_counts_instances_with_verification_failures(
     tmp_path: Path,
     mocker: MockerFixture,

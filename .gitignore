@@ -5,8 +5,10 @@ result-*
 logs/
 cache/
 datasets/
+datasets.old/
 kubernetes/
 results/
+results.old/
 
 # Benchmark outputs
 results/
