@@ -51,6 +51,7 @@ class PullRequestDetail(base.FrozenModel):
     changed_files: tuple[str, ...]
     added_lines: int
     deleted_lines: int
+    changed_file_line_counts: dict[str, int] = pydantic.Field(default_factory=dict)
 
     @pydantic.field_validator("changed_files", "labels", mode="before")
     @classmethod
@@ -419,6 +420,9 @@ def fetch_pull_request_detail(
         changed_files=tuple(entry["filename"] for entry in files),
         added_lines=sum(int(entry.get("additions", 0)) for entry in files),
         deleted_lines=sum(int(entry.get("deletions", 0)) for entry in files),
+        changed_file_line_counts={
+            str(entry["filename"]): int(entry.get("additions", 0)) + int(entry.get("deletions", 0)) for entry in files
+        },
     )
     if cache_dir is not None:
         _write_cache(cache_dir, detail)
@@ -472,6 +476,8 @@ def passes_size_thresholds(
     if max_changed_files is not None and file_count > max_changed_files:
         return False
     total_lines = detail.added_lines + detail.deleted_lines
+    if detail.changed_file_line_counts:
+        total_lines = sum(detail.changed_file_line_counts.get(path, 0) for path in detail.changed_files)
     if total_lines < min_changed_lines:
         return False
     if max_changed_lines is not None and total_lines > max_changed_lines:
@@ -540,7 +546,10 @@ def _read_cache(cache_dir: Path, pr_number: int) -> PullRequestDetail | None:
         raw = cache_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    return _DETAIL_ADAPTER.validate_python(json.loads(raw))
+    payload: dict[str, Any] = json.loads(raw)
+    if "changed_file_line_counts" not in payload:
+        return None
+    return _DETAIL_ADAPTER.validate_python(payload)
 
 
 def _read_failure_cache(cache_dir: Path, pr_number: int) -> str | None:

@@ -55,6 +55,7 @@ def test_fetch_pull_request_detail_combines_core_files_and_parent(mocker: Mocker
         changed_files=("api/foo.go", "api/bar.go"),
         added_lines=13,
         deleted_lines=7,
+        changed_file_line_counts={"api/foo.go": 15, "api/bar.go": 5},
     )
     gh_api.assert_any_call("repos/kubernetes/kubernetes/pulls/42")
     gh_api.assert_any_call("repos/kubernetes/kubernetes/pulls/42/files", paginate=True)
@@ -78,6 +79,7 @@ def test_fetch_pull_request_detail_uses_cache_when_available(
         "changed_files": ["api/foo.go"],
         "added_lines": 1,
         "deleted_lines": 0,
+        "changed_file_line_counts": {"api/foo.go": 1},
     }
     _ = (cache_dir / "7.json").write_text(json.dumps(cached), encoding="utf-8")
     gh_api = mocker.patch("pr_collection._gh_api_json", autospec=True)
@@ -91,6 +93,43 @@ def test_fetch_pull_request_detail_uses_cache_when_available(
     gh_api.assert_not_called()
     assert detail.pr_number == 7
     assert detail.head_sha == "h"
+
+
+def test_fetch_pull_request_detail_refetches_legacy_cache_without_file_line_counts(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    cache_dir = tmp_path / "pr_cache"
+    cache_dir.mkdir()
+    legacy_cached = {
+        "pr_number": 7,
+        "base_sha": "old-parent",
+        "head_sha": "old-head",
+        "title": "old",
+        "body": "",
+        "labels": ["kind/cleanup"],
+        "merged_at": "2026-03-01",
+        "changed_files": ["api/foo.go"],
+        "added_lines": 100,
+        "deleted_lines": 0,
+    }
+    _ = (cache_dir / "7.json").write_text(json.dumps(legacy_cached), encoding="utf-8")
+    gh_api = mocker.patch("pr_collection._gh_api_json", autospec=True)
+    gh_api.side_effect = [
+        _pr_core_payload(number=7, merge_commit_sha="new-head"),
+        {"parents": [{"sha": "new-parent"}]},
+        _pr_files_payload((("api/foo.go", 2, 1),)),
+    ]
+
+    detail = pr_collection.fetch_pull_request_detail(
+        "kubernetes/kubernetes",
+        pr_number=7,
+        cache_dir=cache_dir,
+    )
+
+    assert detail.base_sha == "new-parent"
+    assert detail.head_sha == "new-head"
+    assert detail.changed_file_line_counts == {"api/foo.go": 3}
 
 
 def test_fetch_pull_request_detail_writes_cache_after_fetch(
@@ -115,6 +154,7 @@ def test_fetch_pull_request_detail_writes_cache_after_fetch(
     assert cached["pr_number"] == 9
     assert cached["base_sha"] == "pp"
     assert cached["head_sha"] == "m"
+    assert cached["changed_file_line_counts"] == {"api/foo.go": 3}
 
 
 def test_fetch_pull_request_detail_skips_cached_failures_without_calling_gh(

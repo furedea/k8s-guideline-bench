@@ -102,6 +102,7 @@ def test_dataset_spec_coerces_path_and_target_paths() -> None:
     assert spec.since is None
     assert spec.pr_search_labels == ("kind/cleanup",)
     assert spec.datasets_root == Path("datasets")
+    assert spec.require_production_go_change is False
 
 
 def test_load_dataset_spec_parses_json(tmp_path: Path) -> None:
@@ -116,6 +117,7 @@ def test_load_dataset_spec_parses_json(tmp_path: Path) -> None:
                 "pr_search_labels": ["kind/cleanup"],
                 "datasets_root": "datasets",
                 "pr_limit": 3,
+                "require_production_go_change": True,
             },
         ),
         encoding="utf-8",
@@ -125,6 +127,7 @@ def test_load_dataset_spec_parses_json(tmp_path: Path) -> None:
 
     assert loaded.target_paths == ("api", "pkg/apis")
     assert loaded.pr_limit == 3
+    assert loaded.require_production_go_change is True
 
 
 def test_load_dataset_spec_rejects_invalid_shape(tmp_path: Path) -> None:

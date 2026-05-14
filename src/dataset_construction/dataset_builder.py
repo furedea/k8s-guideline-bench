@@ -126,7 +126,16 @@ def build_dataset_from_spec(spec: dataset_spec.DatasetSpec) -> tuple[DatasetInst
             "dropped": len(label_filtered) - len(non_empty),
         }
     )
-    size_ok = tuple(detail for detail in non_empty if _passes_size_filters(detail, spec))
+    production_go_ok = tuple(detail for detail in non_empty if _passes_production_go_filter(detail, spec))
+    logger.info(
+        {
+            "action": "filter_production_go",
+            "kept": len(production_go_ok),
+            "dropped": len(non_empty) - len(production_go_ok),
+            "enabled": spec.require_production_go_change,
+        }
+    )
+    size_ok = tuple(detail for detail in production_go_ok if _passes_size_filters(detail, spec))
     logger.info(
         {
             "action": "filter_size",
@@ -229,6 +238,19 @@ def _passes_size_filters(
         min_changed_lines=spec.min_changed_lines,
         max_changed_lines=spec.max_changed_lines,
     )
+
+
+def _passes_production_go_filter(
+    detail: pr_collection.PullRequestDetail,
+    spec: dataset_spec.DatasetSpec,
+) -> bool:
+    if not spec.require_production_go_change:
+        return True
+    return any(_is_production_go_file(path) for path in detail.changed_files)
+
+
+def _is_production_go_file(path: str) -> bool:
+    return path.endswith(".go") and not path.endswith("_test.go")
 
 
 def _apply_pr_limit(
