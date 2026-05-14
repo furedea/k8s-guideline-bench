@@ -228,6 +228,7 @@ HOST_INTERNAL_DOCKER_ARG = f"--add-host={HOST_INTERNAL_NAME}:host-gateway"
 HOST_NETWORK_DOCKER_ARG = "--network=host"
 LOCALHOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
 AGENT_EXECUTION_CONFIG_FILENAME = "agent_execution_config.json"
+MINI_SWE_AGENT_TRAJECTORY_FILENAME = "trajectory.json"
 
 
 def build_agentic_workspace_prompt(
@@ -490,7 +491,7 @@ def _run_docker_agent_on_instance(
             started_at=started_at,
             predicted_patch_path=predicted_patch_path,
             exit_code=completed.returncode,
-            failure_reason=_classify_agent_failure(completed),
+            failure_reason=_classify_empty_patch_failure(output_dir, completed),
         )
         if not config.keep_failed_worktree:
             shutil.rmtree(worktree_dir, ignore_errors=True)
@@ -994,6 +995,34 @@ def _classify_agent_failure(completed: subprocess.CompletedProcess[str]) -> str:
         reason = "agent_budget_exceeded"
     elif completed.returncode == AGENT_REPORTED_ERROR_EXIT_CODE:
         reason = "agent_reported_error"
+    return reason
+
+
+def _classify_empty_patch_failure(output_dir: Path, completed: subprocess.CompletedProcess[str]) -> str:
+    trajectory_reason = _classify_mini_swe_agent_trajectory_failure(output_dir / MINI_SWE_AGENT_TRAJECTORY_FILENAME)
+    if trajectory_reason is not None:
+        return trajectory_reason
+    return _classify_agent_failure(completed)
+
+
+def _classify_mini_swe_agent_trajectory_failure(trajectory_path: Path) -> str | None:
+    reason: str | None = None
+    if trajectory_path.exists():
+        try:
+            document = json.loads(trajectory_path.read_text(encoding="utf-8"))
+        except OSError, json.JSONDecodeError:
+            document = None
+        if isinstance(document, dict):
+            info = document.get("info")
+            exit_status = info.get("exit_status") if isinstance(info, dict) else None
+            if isinstance(exit_status, str):
+                normalized = exit_status.replace("_", "").replace("-", "").lower()
+                if normalized == "limitsexceeded":
+                    reason = "agent_budget_exceeded"
+                elif "context" in normalized and "exceeded" in normalized:
+                    reason = "context_window_exceeded"
+                elif normalized == "formaterror":
+                    reason = "agent_reported_error"
     return reason
 
 
