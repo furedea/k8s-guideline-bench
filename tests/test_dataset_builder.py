@@ -246,6 +246,38 @@ def test_build_dataset_from_spec_filters_size_using_retained_target_file_lines(
     assert instances[0].detail.changed_files == ("api/foo.go",)
 
 
+def test_build_dataset_from_spec_requires_retained_production_go_change_when_configured(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    production_with_companions = _make_detail(
+        pr_number=1,
+        changed_files=("api/foo.go", "api/foo_test.go", "api/example.yaml"),
+    )
+    test_only = _make_detail(
+        pr_number=2,
+        changed_files=("api/bar_test.go",),
+    )
+    non_go_only = _make_detail(
+        pr_number=3,
+        changed_files=("api/example.yaml",),
+    )
+    _ = mocker.patch(
+        "pr_collection.collect_pull_requests",
+        autospec=True,
+        return_value=(production_with_companions, test_only, non_go_only),
+    )
+    _ = mocker.patch("dataset_builder._git_show_file", autospec=True, return_value=b"content\n")
+    _ = mocker.patch("dataset_builder._git_diff", autospec=True, return_value=b"diff --git\n")
+
+    spec = _make_spec(tmp_path, require_production_go_change=True)
+
+    instances = dataset_builder.build_dataset_from_spec(spec)
+
+    assert [instance.detail.pr_number for instance in instances] == [1]
+    assert instances[0].detail.changed_files == ("api/foo.go", "api/foo_test.go", "api/example.yaml")
+
+
 def test_build_dataset_from_spec_drops_empty_gold_patch_instances(
     tmp_path: Path,
     mocker: MockerFixture,

@@ -33,6 +33,7 @@
   "max_changed_files": null,
   "min_changed_lines": 1,
   "max_changed_lines": null,
+  "require_production_go_change": true,
   "verification_level": "none",
   "pr_limit": null
 }

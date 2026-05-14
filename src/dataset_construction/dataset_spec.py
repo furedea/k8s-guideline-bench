@@ -27,6 +27,7 @@ class DatasetSpec(base.FrozenModel):
     max_changed_files: int | None = None
     min_changed_lines: int = 0
     max_changed_lines: int | None = None
+    require_production_go_change: bool = False
     model_cutoffs: dict[str, str] = pydantic.Field(default_factory=dict)
     required_pr_labels: tuple[str, ...] = ()
     excluded_pr_labels: tuple[str, ...] = ()
