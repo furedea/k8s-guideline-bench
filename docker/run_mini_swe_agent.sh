@@ -30,8 +30,19 @@ function main() {
 
   : "${OPENAI_API_KEY:?OPENAI_API_KEY is required by LiteLLM}"
 
-  mkdir -p "$(dirname "${TRAJECTORY_PATH}")"
+  mkdir -p "${OUTPUT_DIR}" "$(dirname "${TRAJECTORY_PATH}")"
+  exec > >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stdout.log")
+  exec 2> >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stderr.log" >&2)
+  {
+    echo "model=${MODEL_NAME}"
+    echo "worktree=${WORKTREE}"
+    echo "prompt_path=${PROMPT_PATH}"
+    echo "step_limit=${STEP_LIMIT}"
+    echo "trajectory_path=${TRAJECTORY_PATH}"
+  } >"${OUTPUT_DIR}/mini_swe_agent_settings.env"
+
   cd "${WORKTREE}"
+  set +x
   MSWEA_CONFIGURED=1 mini \
     --agent-class default \
     --exit-immediately \
@@ -40,6 +51,7 @@ function main() {
     -c "agent.step_limit=${STEP_LIMIT}" \
     -o "${TRAJECTORY_PATH}" \
     -t "$(cat "${PROMPT_PATH}")"
+  set -x
 }
 
 main "$@"

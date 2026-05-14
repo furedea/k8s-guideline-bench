@@ -786,7 +786,12 @@ def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
     ) -> subprocess.CompletedProcess[str]:
         _ = capture_output, check, text
         if command[:3] == ["docker", "run", "--rm"]:
-            raise subprocess.TimeoutExpired(cmd=command, timeout=timeout or 0)
+            raise subprocess.TimeoutExpired(
+                cmd=command,
+                timeout=timeout or 0,
+                output="partial stdout\n",
+                stderr="partial stderr\n",
+            )
         if command[:4] == ["git", "-C", str(repo_path), "archive"]:
             Path(command[-1]).write_text("archive", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -826,6 +831,8 @@ def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
     assert result.predicted_patch == ""
     raw_response = (output_dir / "raw_response.txt").read_text(encoding="utf-8")
     assert "agent timed out after 30s" in raw_response
+    assert "partial stdout" in raw_response
+    assert "partial stderr" in raw_response
     assert "exit_code=124" in raw_response
     assert '"status": "failed"' in (output_dir / "run_metadata.json").read_text(encoding="utf-8")
 

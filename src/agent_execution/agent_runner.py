@@ -573,8 +573,8 @@ def _run_docker_agent_command(
             check=False,
             timeout=docker_config.agent_timeout_seconds,
         )
-    except subprocess.TimeoutExpired:
-        return _completed_process_from_timeout(command, docker_config.agent_timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        return _completed_process_from_timeout(command, exc, docker_config.agent_timeout_seconds)
 
 
 def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
@@ -903,14 +903,30 @@ def _read_predicted_patch(predicted_patch_path: Path) -> str:
 
 def _completed_process_from_timeout(
     command: list[str],
+    exc: subprocess.TimeoutExpired,
     timeout_seconds: int,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(
         args=command,
         returncode=AGENT_TIMEOUT_EXIT_CODE,
-        stdout="",
-        stderr=f"agent timed out after {timeout_seconds}s",
+        stdout=_timeout_output_text(exc.stdout),
+        stderr="\n".join(
+            part
+            for part in (
+                _timeout_output_text(exc.stderr).rstrip("\n"),
+                f"agent timed out after {timeout_seconds}s",
+            )
+            if part
+        ),
     )
+
+
+def _timeout_output_text(output: str | bytes | None) -> str:
+    if output is None:
+        return ""
+    if isinstance(output, bytes):
+        return output.decode(errors="replace")
+    return output
 
 
 def _normalize_agent_completed_process(
