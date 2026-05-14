@@ -62,8 +62,16 @@ def _resolve_paths(
         update={
             "repo_path": project_paths.resolve_under(project_root, spec.repo_path),
             "datasets_root": project_paths.resolve_under(project_root, spec.datasets_root),
+            "pr_cache_dir": _resolve_optional_path(project_root, spec.pr_cache_dir),
+            "rejected_root": _resolve_optional_path(project_root, spec.rejected_root),
         },
     )
+
+
+def _resolve_optional_path(project_root: Path, path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    return project_paths.resolve_under(project_root, path)
 
 
 if __name__ == "__main__":
