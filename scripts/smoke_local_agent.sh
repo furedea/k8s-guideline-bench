@@ -31,13 +31,4 @@ uv run python src/llm_judgment/run_experiment.py \
   --limit "${LIMIT}"
 
 echo "== recent local_100 artifacts =="
-find results/local_100 -path '*/run_metadata.json' -print0 |
-  xargs -0 ls -t |
-  head -9 |
-  while read -r metadata; do
-    dir="$(dirname "${metadata}")"
-    echo "--- ${dir} ---"
-    sed -n '1,80p' "${metadata}"
-    test -f "${dir}/mini_swe_agent_settings.env" && sed -n '1,40p' "${dir}/mini_swe_agent_settings.env"
-    test -f "${dir}/trajectory.json" && wc -c "${dir}/trajectory.json"
-  done
+uv run python scripts/inspect_agent_run.py results/local_100 --latest 9

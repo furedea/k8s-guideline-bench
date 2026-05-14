@@ -85,6 +85,7 @@ Inspect a failed run:
 
 ```bash
 d=results/local_100/<run_id>/<pr_number>
+uv run python scripts/inspect_agent_run.py "$d" --top-messages 5 --tail 80
 sed -n '1,120p' "$d/run_metadata.json"
 sed -n '1,120p' "$d/agent_execution_config.json"
 sed -n '1,80p' "$d/mini_swe_agent_settings.env"
@@ -106,3 +107,12 @@ If a run times out, Docker cleanup is attempted using a deterministic container 
 ```bash
 docker ps --format '{{.ID}} {{.Image}} {{.Names}} {{.Command}}' | grep k8s-bench-agent
 ```
+
+For a compact overview of all local runs:
+
+```bash
+uv run python scripts/inspect_agent_run.py results/local_100
+uv run python scripts/inspect_agent_run.py results/local_100 --latest 9
+```
+
+`ctx_est` and `max_msg` are rough token estimates based on saved trajectory text. They are not tokenizer-exact, but they are enough to detect whether a run is burning context on large command output or repeated history.
