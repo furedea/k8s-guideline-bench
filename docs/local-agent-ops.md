@@ -65,6 +65,7 @@ The local config uses:
 - `context_limit`: `65536`
 - `agent_timeout_seconds`: `2400`
 - `MINI_SWE_AGENT_STEP_LIMIT`: defaults to `20`
+- `MINI_SWE_AGENT_COST_LIMIT`: optional mini-SWE-agent cost cap, unset by default
 
 ## Failure Debugging
 

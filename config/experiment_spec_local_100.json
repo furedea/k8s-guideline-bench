@@ -21,7 +21,7 @@
       "backend": "mini_swe_agent",
       "agent_command": "run-mini-swe-agent",
       "docker_args": ["--network=host"],
-      "env_passthrough": ["MINI_SWE_AGENT_STEP_LIMIT"],
+      "env_passthrough": ["MINI_SWE_AGENT_STEP_LIMIT", "MINI_SWE_AGENT_COST_LIMIT"],
       "agent_timeout_seconds": 2400,
       "openai_compatible_provider": {
         "provider_id": "sglang-local",

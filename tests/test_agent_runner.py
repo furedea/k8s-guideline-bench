@@ -901,6 +901,7 @@ def test_run_docker_agentic_instance_injects_mini_swe_agent_local_provider_env(
     assert "MSWEA_COST_TRACKING=ignore_errors" in docker_command
     assert "OUTPUT_PATH=/out" in docker_command
     assert "MINI_SWE_AGENT_STEP_LIMIT" in docker_command
+    assert "MINI_SWE_AGENT_COST_LIMIT" in docker_command
     assert "k8s-bench-agent-mini-swe-agent" in docker_command
 
 

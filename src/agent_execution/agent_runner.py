@@ -734,6 +734,7 @@ def _build_mini_swe_agent_invocation(model: str, docker_config: DockerAgentConfi
                 provider.client.api_key_env or "",
                 "OPENAI_API_KEY",
                 "MINI_SWE_AGENT_STEP_LIMIT",
+                "MINI_SWE_AGENT_COST_LIMIT",
             )
         ),
         env_args=(
