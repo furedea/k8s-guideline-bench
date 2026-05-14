@@ -760,6 +760,8 @@ def test_run_docker_agentic_instance_injects_mini_swe_agent_local_provider_env(
     assert "OPENAI_API_BASE=http://localhost:8002/v1" in docker_command
     assert "OPENAI_BASE_URL=http://localhost:8002/v1" in docker_command
     assert "MSWEA_COST_TRACKING=ignore_errors" in docker_command
+    assert "OUTPUT_PATH=/out" in docker_command
+    assert "MINI_SWE_AGENT_STEP_LIMIT" in docker_command
     assert "k8s-bench-agent-mini-swe-agent" in docker_command
 
 

@@ -549,6 +549,8 @@ def _run_docker_agent_command(
         f"MODEL={backend_invocation.model}",
         "-e",
         f"MAX_TOKENS={config.max_tokens}",
+        "-e",
+        f"OUTPUT_PATH={docker_config.output_path}",
         *_render_env_passthrough_args(backend_invocation.env_passthrough),
         *backend_invocation.env_args,
         "-v",
@@ -626,7 +628,12 @@ def _build_mini_swe_agent_invocation(model: str, docker_config: DockerAgentConfi
     return BackendInvocation(
         model=_resolve_litellm_openai_model(model),
         env_passthrough=_dedupe_strings(
-            (*docker_config.env_passthrough, provider.client.api_key_env or "", "OPENAI_API_KEY")
+            (
+                *docker_config.env_passthrough,
+                provider.client.api_key_env or "",
+                "OPENAI_API_KEY",
+                "MINI_SWE_AGENT_STEP_LIMIT",
+            )
         ),
         env_args=(
             "-e",
