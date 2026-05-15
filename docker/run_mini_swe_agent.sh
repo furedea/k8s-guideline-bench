@@ -28,6 +28,13 @@ function main() {
   readonly STEP_LIMIT="${MINI_SWE_AGENT_STEP_LIMIT:-20}"
   readonly COST_LIMIT="${MINI_SWE_AGENT_COST_LIMIT:-}"
   readonly TRAJECTORY_PATH="${MINI_SWE_AGENT_TRAJECTORY_PATH:-${OUTPUT_DIR}/trajectory.json}"
+  readonly MINI_CONFIG_PATH="${MINI_SWE_AGENT_CONFIG_PATH:-$(
+    python3 - <<'PY'
+from minisweagent.config import builtin_config_dir
+
+print(builtin_config_dir / "mini.yaml")
+PY
+  )}"
 
   : "${OPENAI_API_KEY:?OPENAI_API_KEY is required by LiteLLM}"
 
@@ -38,7 +45,7 @@ function main() {
     echo "model=${MODEL_NAME}"
     echo "worktree=${WORKTREE}"
     echo "prompt_path=${PROMPT_PATH}"
-    echo "config=mini.yaml"
+    echo "config=${MINI_CONFIG_PATH}"
     echo "step_limit=${STEP_LIMIT}"
     echo "cost_limit=${COST_LIMIT}"
     echo "trajectory_path=${TRAJECTORY_PATH}"
@@ -49,7 +56,7 @@ function main() {
     --exit-immediately
     -y
     -m "${MODEL_NAME}"
-    -c mini.yaml "agent.step_limit=${STEP_LIMIT}"
+    -c "${MINI_CONFIG_PATH}" "agent.step_limit=${STEP_LIMIT}"
     -o "${TRAJECTORY_PATH}"
   )
   if [[ -n "${COST_LIMIT}" ]]; then
