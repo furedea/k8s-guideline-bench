@@ -569,6 +569,23 @@ def test_run_docker_agentic_instance_records_mini_swe_agent_budget_exit_for_empt
     assert '"failure_reason": "agent_budget_exceeded"' in metadata
 
 
+def test_classify_agent_failure_does_not_treat_step_limit_config_errors_as_budget_exceeded() -> None:
+    completed = subprocess.CompletedProcess(
+        args=["docker", "run"],
+        returncode=1,
+        stdout="",
+        stderr=(
+            "ValidationError: 2 validation errors for AgentConfig\n"
+            "system_template\n"
+            "  Field required [type=missing, input_value={'step_limit': 20}]\n"
+            "instance_template\n"
+            "  Field required [type=missing, input_value={'step_limit': 20}]\n"
+        ),
+    )
+
+    assert agent_runner._classify_agent_failure(completed) == "agent_error"
+
+
 def test_run_docker_agentic_instance_records_opencode_error_with_zero_exit_as_failure(
     tmp_path: Path,
     mocker: MockerFixture,

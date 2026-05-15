@@ -38,6 +38,7 @@ function main() {
     echo "model=${MODEL_NAME}"
     echo "worktree=${WORKTREE}"
     echo "prompt_path=${PROMPT_PATH}"
+    echo "config=mini.yaml"
     echo "step_limit=${STEP_LIMIT}"
     echo "cost_limit=${COST_LIMIT}"
     echo "trajectory_path=${TRAJECTORY_PATH}"
@@ -48,6 +49,7 @@ function main() {
     --exit-immediately
     -y
     -m "${MODEL_NAME}"
+    -c mini.yaml
     -c "agent.step_limit=${STEP_LIMIT}"
     -o "${TRAJECTORY_PATH}"
   )

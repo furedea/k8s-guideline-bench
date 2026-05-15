@@ -67,6 +67,8 @@ The local config uses:
 - `MINI_SWE_AGENT_STEP_LIMIT`: defaults to `20`
 - `MINI_SWE_AGENT_COST_LIMIT`: optional mini-SWE-agent cost cap, unset by default
 
+The wrapper passes `-c mini.yaml` before `-c agent.step_limit=...`. mini-SWE-agent does not load its default config once any `-c` option is supplied, so the base config must stay explicit.
+
 ## Failure Debugging
 
 Each agent result directory should contain:
