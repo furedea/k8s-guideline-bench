@@ -992,8 +992,10 @@ def _classify_agent_failure(completed: subprocess.CompletedProcess[str]) -> str:
         reason = "rate_limited"
     elif "badrequest" in output or "bad request" in output:
         reason = "bad_request"
-    elif "limitsexceeded" in output or "step_limit" in output or "step limit" in output:
+    elif "limitsexceeded" in output or "limits exceeded" in output:
         reason = "agent_budget_exceeded"
+    elif "validationerror" in output and "agentconfig" in output:
+        reason = "agent_error"
     elif completed.returncode == AGENT_REPORTED_ERROR_EXIT_CODE:
         reason = "agent_reported_error"
     return reason
