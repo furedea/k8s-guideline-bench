@@ -6,7 +6,7 @@
   "instance_limit": 100,
   "judge_target_policy": "gold_scope",
   "agent_matrix": {
-    "run_id_prefix": "local100_mini",
+    "run_id_prefix": "local100_mini_qwen36_fp8",
     "models": [
       "Qwen/Qwen3.6-27B-FP8"
     ],
@@ -21,6 +21,8 @@
       "backend": "mini_swe_agent",
       "agent_command": "run-mini-swe-agent",
       "docker_args": ["--network=host"],
+      "env_passthrough": ["MINI_SWE_AGENT_STEP_LIMIT", "MINI_SWE_AGENT_COST_LIMIT"],
+      "agent_timeout_seconds": 2400,
       "openai_compatible_provider": {
         "provider_id": "sglang-local",
         "name": "SGLang local",
@@ -29,7 +31,7 @@
           "api_key_env": "LOCAL_LLM_API_KEY",
           "base_url": "http://localhost:8002/v1"
         },
-        "context_limit": 16384,
+        "context_limit": 65536,
         "output_limit": 4096
       }
     },

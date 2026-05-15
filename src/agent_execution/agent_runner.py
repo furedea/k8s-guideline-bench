@@ -201,6 +201,7 @@ class AgentRunMetadata(base.FrozenModel):
     predicted_patch_bytes: int
     attached_context_files: tuple[str, ...]
     exit_code: int | None = None
+    failure_reason: str | None = None
 
 
 class BackendInvocation(base.FrozenModel):
@@ -218,6 +219,7 @@ DOCKER_CONSTRAINTS_FILENAME = "constraints.json"
 RUN_METADATA_FILENAME = "run_metadata.json"
 AGENT_TIMEOUT_EXIT_CODE = 124
 AGENT_REPORTED_ERROR_EXIT_CODE = 1
+AGENT_EMPTY_PATCH_EXIT_CODE = 125
 OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
 OPENCODE_CONFIG_SCHEMA = "https://opencode.ai/config.json"
 OPENAI_COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible"
@@ -225,6 +227,8 @@ HOST_INTERNAL_NAME = "host.docker.internal"
 HOST_INTERNAL_DOCKER_ARG = f"--add-host={HOST_INTERNAL_NAME}:host-gateway"
 HOST_NETWORK_DOCKER_ARG = "--network=host"
 LOCALHOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+AGENT_EXECUTION_CONFIG_FILENAME = "agent_execution_config.json"
+MINI_SWE_AGENT_TRAJECTORY_FILENAME = "trajectory.json"
 
 
 def build_agentic_workspace_prompt(
@@ -421,6 +425,7 @@ def _run_docker_agent_on_instance(
     _ = (output_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
     _ = (context_dir / DOCKER_PROMPT_FILENAME).write_text(prompt, encoding="utf-8")
     _write_docker_context(context_dir, instance, constraints, config)
+    _write_agent_execution_config(output_dir, instance, config)
 
     completed = _run_docker_agent_command(
         instance=instance,
@@ -434,6 +439,7 @@ def _run_docker_agent_on_instance(
     raw_response = _render_docker_raw_response(completed)
     _ = (output_dir / "raw_response.txt").write_text(raw_response, encoding="utf-8")
     if completed.returncode != 0:
+        failure_reason = _classify_agent_failure(completed)
         _write_run_metadata(
             output_dir=output_dir,
             instance=instance,
@@ -442,6 +448,7 @@ def _run_docker_agent_on_instance(
             started_at=started_at,
             predicted_patch_path=predicted_patch_path,
             exit_code=completed.returncode,
+            failure_reason=failure_reason,
         )
         if not config.keep_failed_worktree:
             shutil.rmtree(worktree_dir, ignore_errors=True)
@@ -461,6 +468,42 @@ def _run_docker_agent_on_instance(
 
     _collect_predicted_patch(worktree_dir, instance.detail.changed_files, predicted_patch_path)
     predicted_patch = predicted_patch_path.read_text(encoding="utf-8") if predicted_patch_path.exists() else ""
+    if not predicted_patch:
+        completed = subprocess.CompletedProcess(
+            args=completed.args,
+            returncode=AGENT_EMPTY_PATCH_EXIT_CODE,
+            stdout=completed.stdout,
+            stderr="\n".join(
+                part
+                for part in (
+                    completed.stderr.rstrip("\n"),
+                    "Agent completed without producing a patch.",
+                )
+                if part
+            ),
+        )
+        _ = (output_dir / "raw_response.txt").write_text(_render_docker_raw_response(completed), encoding="utf-8")
+        _write_run_metadata(
+            output_dir=output_dir,
+            instance=instance,
+            config=config,
+            status=AgentRunStatus.FAILED,
+            started_at=started_at,
+            predicted_patch_path=predicted_patch_path,
+            exit_code=completed.returncode,
+            failure_reason=_classify_empty_patch_failure(output_dir, completed),
+        )
+        if not config.keep_failed_worktree:
+            shutil.rmtree(worktree_dir, ignore_errors=True)
+        logger.warning(
+            {
+                "action": "agent_run_failed",
+                "run_id": config.run_id,
+                "pr_number": instance.detail.pr_number,
+                "exit_code": completed.returncode,
+            }
+        )
+        return AgentRunResult(run_id=config.run_id, predicted_patch="", status=AgentRunStatus.FAILED)
     _write_run_metadata(
         output_dir=output_dir,
         instance=instance,
@@ -469,6 +512,7 @@ def _run_docker_agent_on_instance(
         started_at=started_at,
         predicted_patch_path=predicted_patch_path,
         exit_code=completed.returncode,
+        failure_reason=None,
     )
     if not config.keep_worktree:
         shutil.rmtree(worktree_dir, ignore_errors=True)
@@ -498,6 +542,49 @@ def _write_docker_context(
         encoding="utf-8",
     )
     _copy_attached_context_files(context_dir, config.context_files)
+
+
+def _write_agent_execution_config(
+    output_dir: Path,
+    instance: dataset_builder.DatasetInstance,
+    config: AgentRunConfig,
+) -> None:
+    docker = config.docker
+    provider = docker.openai_compatible_provider
+    document = {
+        "run_id": config.run_id,
+        "model": config.model,
+        "max_tokens": config.max_tokens,
+        "context_strategy": config.context_strategy.value,
+        "pr_number": instance.detail.pr_number,
+        "docker": {
+            "image": docker.image,
+            "backend": docker.backend.value,
+            "agent_command": docker.agent_command,
+            "docker_args": list(docker.docker_args),
+            "env_passthrough": list(docker.env_passthrough),
+            "worktree_path": docker.worktree_path,
+            "bench_context_path": docker.bench_context_path,
+            "output_path": docker.output_path,
+            "agent_timeout_seconds": docker.agent_timeout_seconds,
+        },
+        "openai_compatible_provider": None
+        if provider is None
+        else {
+            "provider_id": provider.provider_id,
+            "name": provider.name,
+            "base_url": provider.client.base_url,
+            "api_key_env": provider.client.api_key_env,
+            "context_limit": provider.context_limit,
+            "output_limit": provider.output_limit,
+        },
+        "context_files": [context_file.bench_path for context_file in config.context_files],
+        "initial_constraint_ids": list(config.initial_constraint_ids),
+    }
+    _ = (output_dir / AGENT_EXECUTION_CONFIG_FILENAME).write_text(
+        json.dumps(document, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def _copy_attached_context_files(
@@ -533,10 +620,13 @@ def _run_docker_agent_command(
     constraints_path = f"{docker_config.bench_context_path}/{DOCKER_CONSTRAINTS_FILENAME}"
     shell_script = f"set -euxCo pipefail\n{docker_config.agent_command}"
     backend_invocation = _build_backend_invocation(config.model, docker_config)
+    container_name = _docker_container_name(config.run_id, instance.detail.pr_number)
     command = [
         "docker",
         "run",
         "--rm",
+        "--name",
+        container_name,
         "-e",
         f"BASE_SHA={instance.detail.base_sha}",
         "-e",
@@ -549,6 +639,8 @@ def _run_docker_agent_command(
         f"MODEL={backend_invocation.model}",
         "-e",
         f"MAX_TOKENS={config.max_tokens}",
+        "-e",
+        f"OUTPUT_PATH={docker_config.output_path}",
         *_render_env_passthrough_args(backend_invocation.env_passthrough),
         *backend_invocation.env_args,
         "-v",
@@ -571,8 +663,9 @@ def _run_docker_agent_command(
             check=False,
             timeout=docker_config.agent_timeout_seconds,
         )
-    except subprocess.TimeoutExpired:
-        return _completed_process_from_timeout(command, docker_config.agent_timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        _remove_docker_container(container_name)
+        return _completed_process_from_timeout(command, exc, docker_config.agent_timeout_seconds)
 
 
 def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
@@ -580,6 +673,16 @@ def _render_env_passthrough_args(env_names: tuple[str, ...]) -> list[str]:
     for env_name in env_names:
         args.extend(("-e", env_name))
     return args
+
+
+def _docker_container_name(run_id: str, pr_number: int) -> str:
+    safe_run_id = "".join(character if character.isalnum() else "-" for character in run_id.lower())
+    safe_run_id = "-".join(part for part in safe_run_id.split("-") if part)
+    return f"k8s-bench-agent-{safe_run_id}-{pr_number}"[:128]
+
+
+def _remove_docker_container(container_name: str) -> None:
+    _ = subprocess.run(["docker", "rm", "-f", container_name], capture_output=True, text=True, check=False)
 
 
 def _build_backend_invocation(model: str, docker_config: DockerAgentConfig) -> BackendInvocation:
@@ -626,7 +729,13 @@ def _build_mini_swe_agent_invocation(model: str, docker_config: DockerAgentConfi
     return BackendInvocation(
         model=_resolve_litellm_openai_model(model),
         env_passthrough=_dedupe_strings(
-            (*docker_config.env_passthrough, provider.client.api_key_env or "", "OPENAI_API_KEY")
+            (
+                *docker_config.env_passthrough,
+                provider.client.api_key_env or "",
+                "OPENAI_API_KEY",
+                "MINI_SWE_AGENT_STEP_LIMIT",
+                "MINI_SWE_AGENT_COST_LIMIT",
+            )
         ),
         env_args=(
             "-e",
@@ -847,6 +956,7 @@ def _write_run_metadata(
     started_at: dt.datetime,
     predicted_patch_path: Path,
     exit_code: int | None,
+    failure_reason: str | None = None,
 ) -> None:
     finished_at = dt.datetime.now(tz=dt.UTC)
     predicted_patch_bytes = predicted_patch_path.stat().st_size if predicted_patch_path.exists() else 0
@@ -861,11 +971,60 @@ def _write_run_metadata(
         predicted_patch_bytes=predicted_patch_bytes,
         attached_context_files=tuple(context_file.bench_path for context_file in config.context_files),
         exit_code=exit_code,
+        failure_reason=failure_reason,
     )
     _ = (output_dir / RUN_METADATA_FILENAME).write_text(
         json.dumps(metadata.model_dump(mode="json"), indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def _classify_agent_failure(completed: subprocess.CompletedProcess[str]) -> str:
+    output = f"{completed.stdout}\n{completed.stderr}".lower()
+    reason = "agent_error"
+    if completed.returncode == AGENT_TIMEOUT_EXIT_CODE:
+        reason = "timeout"
+    elif completed.returncode == AGENT_EMPTY_PATCH_EXIT_CODE:
+        reason = "empty_patch"
+    elif "contextwindowexceeded" in output or "context length" in output or "longer than the model" in output:
+        reason = "context_window_exceeded"
+    elif "rate limit" in output or "ratelimit" in output:
+        reason = "rate_limited"
+    elif "badrequest" in output or "bad request" in output:
+        reason = "bad_request"
+    elif "limitsexceeded" in output or "step_limit" in output or "step limit" in output:
+        reason = "agent_budget_exceeded"
+    elif completed.returncode == AGENT_REPORTED_ERROR_EXIT_CODE:
+        reason = "agent_reported_error"
+    return reason
+
+
+def _classify_empty_patch_failure(output_dir: Path, completed: subprocess.CompletedProcess[str]) -> str:
+    trajectory_reason = _classify_mini_swe_agent_trajectory_failure(output_dir / MINI_SWE_AGENT_TRAJECTORY_FILENAME)
+    if trajectory_reason is not None:
+        return trajectory_reason
+    return _classify_agent_failure(completed)
+
+
+def _classify_mini_swe_agent_trajectory_failure(trajectory_path: Path) -> str | None:
+    reason: str | None = None
+    if trajectory_path.exists():
+        try:
+            document = json.loads(trajectory_path.read_text(encoding="utf-8"))
+        except OSError, json.JSONDecodeError:
+            document = None
+        if isinstance(document, dict):
+            info = document.get("info")
+            exit_status = info.get("exit_status") if isinstance(info, dict) else None
+            if isinstance(exit_status, str):
+                normalized = exit_status.replace("_", "").replace("-", "").lower()
+                if normalized == "limitsexceeded":
+                    reason = "agent_budget_exceeded"
+                elif "context" in normalized and "exceeded" in normalized:
+                    reason = "context_window_exceeded"
+                elif normalized == "formaterror":
+                    reason = "agent_reported_error"
+    return reason
 
 
 def _is_previous_run_skippable(metadata_path: Path) -> bool:
@@ -896,14 +1055,30 @@ def _read_predicted_patch(predicted_patch_path: Path) -> str:
 
 def _completed_process_from_timeout(
     command: list[str],
+    exc: subprocess.TimeoutExpired,
     timeout_seconds: int,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(
         args=command,
         returncode=AGENT_TIMEOUT_EXIT_CODE,
-        stdout="",
-        stderr=f"agent timed out after {timeout_seconds}s",
+        stdout=_timeout_output_text(exc.stdout),
+        stderr="\n".join(
+            part
+            for part in (
+                _timeout_output_text(exc.stderr).rstrip("\n"),
+                f"agent timed out after {timeout_seconds}s",
+            )
+            if part
+        ),
     )
+
+
+def _timeout_output_text(output: str | bytes | None) -> str:
+    if output is None:
+        return ""
+    if isinstance(output, bytes):
+        return output.decode(errors="replace")
+    return output
 
 
 def _normalize_agent_completed_process(

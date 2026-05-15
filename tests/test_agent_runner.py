@@ -343,12 +343,18 @@ def test_run_docker_agentic_instance_runs_container_and_collects_git_diff(
     assert not (output_dir / "bench_context" / "constraints.json").exists()
     assert "agent done" in (output_dir / "raw_response.txt").read_text(encoding="utf-8")
     assert (output_dir / "run_metadata.json").exists()
+    execution_config = json.loads((output_dir / "agent_execution_config.json").read_text(encoding="utf-8"))
+    assert execution_config["docker"]["image"] == "k8s-bench-agent"
+    assert execution_config["docker"]["agent_timeout_seconds"] == 1800
+    assert execution_config["openai_compatible_provider"] is None
     assert not (output_dir / "worktree").exists()
 
     docker_command = next(
         call.args[0] for call in run_mock.call_args_list if call.args[0][:3] == ["docker", "run", "--rm"]
     )
     assert docker_command[:3] == ["docker", "run", "--rm"]
+    assert "--name" in docker_command
+    assert "k8s-bench-agent-docker-run-42" in docker_command
     assert "BASE_SHA=def456" in docker_command
     assert "OPENCODE_API_KEY" in docker_command
     assert f"{(output_dir / 'worktree').resolve()}:/work" in docker_command
@@ -428,6 +434,139 @@ def test_run_docker_agentic_instance_records_failures_without_raising(
     metadata = (output_dir / "run_metadata.json").read_text(encoding="utf-8")
     assert '"status": "failed"' in metadata
     assert (output_dir / "worktree").exists()
+
+
+def test_run_docker_agentic_instance_records_empty_patch_as_failure(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    def fake_run(
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+        _ = capture_output, text, check, timeout
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:3] == ["git", "-C", str(results_root / "docker-run" / "42" / "worktree")]:
+            return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+        return subprocess.CompletedProcess(command, 0, stdout="agent done", stderr="")
+
+    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent",
+            agent_command='agent run "$AGENT_PROMPT_PATH"',
+        ),
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    output_dir = results_root / "docker-run" / "42"
+    assert result.status == agent_runner.AgentRunStatus.FAILED
+    assert result.predicted_patch == ""
+    raw_response = (output_dir / "raw_response.txt").read_text(encoding="utf-8")
+    assert "exit_code=125" in raw_response
+    assert "Agent completed without producing a patch." in raw_response
+    metadata = (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+    assert '"failure_reason": "empty_patch"' in metadata
+
+
+def test_run_docker_agentic_instance_records_mini_swe_agent_budget_exit_for_empty_patch(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    output_dir = results_root / "docker-run" / "42"
+
+    def fake_run(  # noqa: PLR0911
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+        _ = capture_output, text, check, timeout
+        if command[:3] == ["docker", "run", "--rm"]:
+            _ = (output_dir / "trajectory.json").write_text(
+                json.dumps({"info": {"exit_status": "LimitsExceeded"}, "messages": []}),
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:3] == ["git", "-C", str(results_root / "docker-run" / "42" / "worktree")]:
+            return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent-mini-swe-agent",
+            agent_command="run-mini-swe-agent",
+            backend=agent_runner.AgentBackend.MINI_SWE_AGENT,
+        ),
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    assert result.status == agent_runner.AgentRunStatus.FAILED
+    metadata = (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+    assert '"failure_reason": "agent_budget_exceeded"' in metadata
 
 
 def test_run_docker_agentic_instance_records_opencode_error_with_zero_exit_as_failure(
@@ -760,6 +899,9 @@ def test_run_docker_agentic_instance_injects_mini_swe_agent_local_provider_env(
     assert "OPENAI_API_BASE=http://localhost:8002/v1" in docker_command
     assert "OPENAI_BASE_URL=http://localhost:8002/v1" in docker_command
     assert "MSWEA_COST_TRACKING=ignore_errors" in docker_command
+    assert "OUTPUT_PATH=/out" in docker_command
+    assert "MINI_SWE_AGENT_STEP_LIMIT" in docker_command
+    assert "MINI_SWE_AGENT_COST_LIMIT" in docker_command
     assert "k8s-bench-agent-mini-swe-agent" in docker_command
 
 
@@ -784,7 +926,12 @@ def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
     ) -> subprocess.CompletedProcess[str]:
         _ = capture_output, check, text
         if command[:3] == ["docker", "run", "--rm"]:
-            raise subprocess.TimeoutExpired(cmd=command, timeout=timeout or 0)
+            raise subprocess.TimeoutExpired(
+                cmd=command,
+                timeout=timeout or 0,
+                output="partial stdout\n",
+                stderr="partial stderr\n",
+            )
         if command[:4] == ["git", "-C", str(repo_path), "archive"]:
             Path(command[-1]).write_text("archive", encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
@@ -798,7 +945,7 @@ def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    run_mock = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
     config = agent_runner.AgentRunConfig(
         run_id="docker-run",
         model="agent-model",
@@ -824,8 +971,14 @@ def test_run_docker_agentic_instance_records_docker_timeout_as_failure(
     assert result.predicted_patch == ""
     raw_response = (output_dir / "raw_response.txt").read_text(encoding="utf-8")
     assert "agent timed out after 30s" in raw_response
+    assert "partial stdout" in raw_response
+    assert "partial stderr" in raw_response
     assert "exit_code=124" in raw_response
-    assert '"status": "failed"' in (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+    metadata = (output_dir / "run_metadata.json").read_text(encoding="utf-8")
+    assert '"status": "failed"' in metadata
+    assert '"failure_reason": "timeout"' in metadata
+    rm_commands = [call.args[0] for call in run_mock.call_args_list if call.args[0][:3] == ["docker", "rm", "-f"]]
+    assert rm_commands == [["docker", "rm", "-f", "k8s-bench-agent-docker-run-42"]]
 
 
 def test_run_docker_agentic_instance_copies_attached_context_files(
