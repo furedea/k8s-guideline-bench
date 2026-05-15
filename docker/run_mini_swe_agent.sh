@@ -49,8 +49,7 @@ function main() {
     --exit-immediately
     -y
     -m "${MODEL_NAME}"
-    -c mini.yaml
-    -c "agent.step_limit=${STEP_LIMIT}"
+    -c mini.yaml "agent.step_limit=${STEP_LIMIT}"
     -o "${TRAJECTORY_PATH}"
   )
   if [[ -n "${COST_LIMIT}" ]]; then

@@ -60,7 +60,7 @@ def test_mini_swe_agent_wrapper_dependencies_are_provided_by_image() -> None:
     assert "MINI_SWE_AGENT_STEP_LIMIT" in wrapper_text
     assert "MINI_SWE_AGENT_COST_LIMIT" in wrapper_text
     assert "agent.step_limit=${STEP_LIMIT}" in wrapper_text
-    assert "-c mini.yaml" in wrapper_text
+    assert '-c mini.yaml "agent.step_limit=${STEP_LIMIT}"' in wrapper_text
     assert '-l "${COST_LIMIT}"' in wrapper_text
     assert '-o "${TRAJECTORY_PATH}"' in wrapper_text
     assert "mini_swe_agent_stdout.log" in wrapper_text
