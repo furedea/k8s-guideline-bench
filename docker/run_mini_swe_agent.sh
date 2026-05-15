@@ -28,17 +28,40 @@ function main() {
   readonly STEP_LIMIT="${MINI_SWE_AGENT_STEP_LIMIT:-20}"
   readonly COST_LIMIT="${MINI_SWE_AGENT_COST_LIMIT:-}"
   readonly TRAJECTORY_PATH="${MINI_SWE_AGENT_TRAJECTORY_PATH:-${OUTPUT_DIR}/trajectory.json}"
+  readonly MINI_CONFIG_SOURCE_PATH="${MINI_SWE_AGENT_CONFIG_PATH:-$(
+    python3 - <<'PY'
+from minisweagent.config import builtin_config_dir
+
+print(builtin_config_dir / "mini.yaml")
+PY
+  )}"
+  readonly MINI_RUNTIME_CONFIG_PATH="${OUTPUT_DIR}/mini_runtime.yaml"
 
   : "${OPENAI_API_KEY:?OPENAI_API_KEY is required by LiteLLM}"
 
   mkdir -p "${OUTPUT_DIR}" "$(dirname "${TRAJECTORY_PATH}")"
   exec > >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stdout.log")
   exec 2> >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stderr.log" >&2)
+  python3 - "${MINI_CONFIG_SOURCE_PATH}" "${MINI_RUNTIME_CONFIG_PATH}" "${STEP_LIMIT}" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+source_path = Path(sys.argv[1])
+runtime_path = Path(sys.argv[2])
+step_limit = int(sys.argv[3])
+
+config = yaml.safe_load(source_path.read_text()) or {}
+config.setdefault("agent", {})["step_limit"] = step_limit
+runtime_path.write_text(yaml.safe_dump(config, sort_keys=False))
+PY
   {
     echo "model=${MODEL_NAME}"
     echo "worktree=${WORKTREE}"
     echo "prompt_path=${PROMPT_PATH}"
-    echo "config=mini.yaml"
+    echo "config_source=${MINI_CONFIG_SOURCE_PATH}"
+    echo "runtime_config=${MINI_RUNTIME_CONFIG_PATH}"
     echo "step_limit=${STEP_LIMIT}"
     echo "cost_limit=${COST_LIMIT}"
     echo "trajectory_path=${TRAJECTORY_PATH}"
@@ -49,7 +72,7 @@ function main() {
     --exit-immediately
     -y
     -m "${MODEL_NAME}"
-    -c mini.yaml "agent.step_limit=${STEP_LIMIT}"
+    -c "${MINI_RUNTIME_CONFIG_PATH}"
     -o "${TRAJECTORY_PATH}"
   )
   if [[ -n "${COST_LIMIT}" ]]; then
