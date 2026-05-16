@@ -206,7 +206,9 @@ def _run_review_sheet(arguments: argparse.Namespace) -> None:
     interpretations_path = arguments.interpretations_path or (
         docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json"
     )
-    output_path = arguments.output_path or (docs_dir / "human" / "api-conventions" / "shigyos_atomic_constraints.csv")
+    output_path = arguments.output_path or (
+        docs_dir / "human" / "api-conventions" / "atomic_constraint_review_sheet.csv"
+    )
 
     print(f"[review-sheet] loading constraint candidates from {constraint_candidates_path}", flush=True)
     candidate_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_candidates_path)
