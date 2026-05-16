@@ -268,6 +268,45 @@ def test_run_judgment_judges_existing_agent_results_without_running_agents(
     assert (spec.results_root / "run-001" / "42" / "judgments.json").exists()
 
 
+def test_run_judgment_skips_failed_existing_agent_result_without_patch_file(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    spec = _make_experiment_spec(tmp_path)
+    instances = (_materialize_instance(spec.datasets_root, 42),)
+    run_dir = spec.results_root / "run-001" / "42"
+    run_dir.mkdir(parents=True)
+    _ = (run_dir / "run_metadata.json").write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "model": "agent",
+                "context_strategy": "no_constraints",
+                "pr_number": 42,
+                "started_at": "2026-03-01T00:00:00+00:00",
+                "finished_at": "2026-03-01T00:00:01+00:00",
+                "duration_seconds": 1.0,
+                "predicted_patch_bytes": 0,
+                "attached_context_files": [],
+                "exit_code": 1,
+                "failure_reason": "agent_reported_error",
+            },
+        ),
+        encoding="utf-8",
+    )
+    run_agents = mocker.patch("agent_runner.run_agent_on_instances", autospec=True)
+    judge_instance = mocker.patch("judge.judge_instance", autospec=True)
+
+    report = experiment.run_judgment(spec, instances, client_factory=_stub_factory)
+
+    run_agents.assert_not_called()
+    judge_instance.assert_not_called()
+    run = report.runs[0]
+    assert run.agent_failed == 1
+    assert run.summary.total == 0
+    assert not (spec.results_root / "run-001" / "42" / "judgments.json").exists()
+
+
 def test_run_judgment_fails_fast_when_gold_scope_policy_lacks_gold_scope(
     tmp_path: Path,
 ) -> None:
