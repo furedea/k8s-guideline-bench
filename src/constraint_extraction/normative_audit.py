@@ -46,6 +46,37 @@ class KeywordCandidate(base.FrozenModel):
     lead_in_span: str | None = None
 
 
+class SourceSentence(base.FrozenModel):
+    """A source sentence split from one original guideline block."""
+
+    id: str
+    text: str
+    has_keyword: bool
+
+
+class SentenceSelectionTask(base.FrozenModel):
+    """One keyword sentence plus neighboring source sentences for LLM selection."""
+
+    id: str
+    block_id: str
+    source_span: str
+    section: str
+    kind: CandidateKind
+    block_original: str
+    main_sentence: SourceSentence
+    shared_context_sentences: tuple[SourceSentence, ...] = ()
+    context_sentences: tuple[SourceSentence, ...]
+
+
+class ContextSelectionConflict(base.FrozenModel):
+    """A context sentence selected for multiple main sentences in one block."""
+
+    block_id: str
+    sentence_id: str
+    sentence_text: str
+    task_ids: tuple[str, ...]
+
+
 class KeywordNormativeRule(base.FrozenModel):
     """Keyword-bearing normative rule extracted one-by-one from the document."""
 
@@ -142,6 +173,96 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
     return tuple(candidates)
 
 
+def extract_sentence_selection_tasks(document_text: str) -> tuple[SentenceSelectionTask, ...]:
+    """Extract keyword sentences with their original block and nearby context candidates."""
+    tasks: list[SentenceSelectionTask] = []
+    for block_index, (start_line, end_line, section, kind, block_text) in enumerate(
+        _collect_blocks(document_text),
+        1,
+    ):
+        block_id = f"block_{block_index:04d}"
+        block_original = _normalize_block_text(block_text)
+        sentences = _source_sentences(block_text)
+        keyword_positions = tuple(index for index, sentence in enumerate(sentences) if sentence.has_keyword)
+        shared_context_sentences = _shared_context_sentences(sentences, keyword_positions)
+        tasks.extend(
+            SentenceSelectionTask(
+                id=f"{block_id}_{sentences[keyword_position].id}",
+                block_id=block_id,
+                source_span=f"{start_line}-{end_line}",
+                section=section,
+                kind=kind,
+                block_original=block_original,
+                main_sentence=sentences[keyword_position],
+                shared_context_sentences=shared_context_sentences,
+                context_sentences=_bounded_context_sentences(
+                    sentences=sentences,
+                    keyword_positions=keyword_positions,
+                    keyword_position_index=keyword_position_index,
+                ),
+            )
+            for keyword_position_index, keyword_position in enumerate(keyword_positions)
+        )
+    return tuple(tasks)
+
+
+def build_selected_original(task: SentenceSelectionTask, selected_context_sentence_ids: tuple[str, ...]) -> str:
+    """Build an exact original excerpt from selected context sentence IDs."""
+    unknown_ids = _unknown_context_sentence_ids(task, selected_context_sentence_ids)
+    if unknown_ids:
+        msg = f"Unknown context sentence IDs for {task.id}: {', '.join(unknown_ids)}"
+        raise ValueError(msg)
+    selected_ids = frozenset((*selected_context_sentence_ids, task.main_sentence.id))
+    sentences = (task.main_sentence, *task.shared_context_sentences, *task.context_sentences)
+    ordered_sentences = sorted(
+        (sentence for sentence in sentences if sentence.id in selected_ids),
+        key=lambda sentence: _sentence_number(sentence.id),
+    )
+    return " ".join(sentence.text for sentence in ordered_sentences)
+
+
+def find_context_selection_conflicts(
+    tasks: tuple[SentenceSelectionTask, ...],
+    selections_by_task_id: dict[str, tuple[str, ...]],
+) -> tuple[ContextSelectionConflict, ...]:
+    """Find non-shared context sentences selected for multiple main sentences."""
+    tasks_by_id = {task.id: task for task in tasks}
+    unknown_task_ids = tuple(task_id for task_id in selections_by_task_id if task_id not in tasks_by_id)
+    if unknown_task_ids:
+        msg = f"Unknown sentence selection task IDs: {', '.join(unknown_task_ids)}"
+        raise ValueError(msg)
+
+    task_ids_by_context_id: dict[tuple[str, str], list[str]] = {}
+    text_by_context_id: dict[tuple[str, str], str] = {}
+    for task_id, selected_context_sentence_ids in selections_by_task_id.items():
+        task = tasks_by_id[task_id]
+        unknown_ids = _unknown_context_sentence_ids(task, selected_context_sentence_ids)
+        if unknown_ids:
+            msg = f"Unknown context sentence IDs for {task.id}: {', '.join(unknown_ids)}"
+            raise ValueError(msg)
+
+        context_text_by_sentence_id = {sentence.id: sentence.text for sentence in task.context_sentences}
+        for sentence_id in selected_context_sentence_ids:
+            if sentence_id not in context_text_by_sentence_id:
+                continue
+            key = (task.block_id, sentence_id)
+            task_ids_by_context_id.setdefault(key, []).append(task.id)
+            text_by_context_id[key] = context_text_by_sentence_id[sentence_id]
+
+    conflicts = [
+        ContextSelectionConflict(
+            block_id=block_id,
+            sentence_id=sentence_id,
+            sentence_text=text_by_context_id[(block_id, sentence_id)],
+            task_ids=tuple(dict.fromkeys(task_ids)),
+        )
+        for (block_id, sentence_id), task_ids in task_ids_by_context_id.items()
+        if len(dict.fromkeys(task_ids)) > 1
+    ]
+    conflicts.sort(key=lambda conflict: (conflict.block_id, _sentence_number(conflict.sentence_id)))
+    return tuple(conflicts)
+
+
 def audit_normative_coverage(
     candidates: tuple[KeywordCandidate, ...],
     constraints: tuple[normative_constraint.NormativeConstraint, ...],
@@ -205,6 +326,18 @@ def save_keyword_normative_rules(
 ) -> None:
     """Save keyword-bearing normative rules as JSON."""
     payload = {"constraints": [rule.model_dump(mode="json") for rule in rules]}
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def save_sentence_selection_tasks(
+    tasks: tuple[SentenceSelectionTask, ...],
+    output_path: Path,
+) -> None:
+    """Save sentence selection tasks for one-shot LLM normalization."""
+    payload = {"tasks": [task.model_dump(mode="json") for task in tasks]}
     output_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -374,6 +507,62 @@ def _split_paragraph_sentences(block_text: str) -> tuple[str, ...]:
     protected = _protect_abbreviations(normalized)
     sentences = re.split(r"(?<=[.!?])\s+", protected)
     return tuple(_restore_abbreviations(sentence).strip() for sentence in sentences if sentence.strip())
+
+
+def _source_sentences(block_text: str) -> tuple[SourceSentence, ...]:
+    """Split one block into numbered source sentences."""
+    return tuple(
+        SourceSentence(
+            id=f"s{index}",
+            text=sentence,
+            has_keyword=_KEYWORD_RE.search(sentence) is not None,
+        )
+        for index, sentence in enumerate(_split_paragraph_sentences(block_text), 1)
+    )
+
+
+def _unknown_context_sentence_ids(
+    task: SentenceSelectionTask,
+    selected_context_sentence_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return selected IDs that are not available context sentences for a task."""
+    known_context_ids = frozenset(
+        sentence.id for sentence in (*task.shared_context_sentences, *task.context_sentences)
+    )
+    return tuple(sentence_id for sentence_id in selected_context_sentence_ids if sentence_id not in known_context_ids)
+
+
+def _shared_context_sentences(
+    sentences: tuple[SourceSentence, ...],
+    keyword_positions: tuple[int, ...],
+) -> tuple[SourceSentence, ...]:
+    """Return block-leading non-keyword sentences available to every main sentence."""
+    if not keyword_positions:
+        return ()
+    first_keyword_position = keyword_positions[0]
+    return tuple(sentence for sentence in sentences[:first_keyword_position] if not sentence.has_keyword)
+
+
+def _bounded_context_sentences(
+    *,
+    sentences: tuple[SourceSentence, ...],
+    keyword_positions: tuple[int, ...],
+    keyword_position_index: int,
+) -> tuple[SourceSentence, ...]:
+    """Return non-keyword context bounded by neighboring keyword sentences."""
+    keyword_position = keyword_positions[keyword_position_index]
+    previous_keyword_position = keyword_positions[keyword_position_index - 1] if keyword_position_index > 0 else None
+    next_keyword_position = (
+        keyword_positions[keyword_position_index + 1] if keyword_position_index < len(keyword_positions) - 1 else None
+    )
+    start_position = keyword_position + 1 if previous_keyword_position is None else previous_keyword_position + 1
+    end_position = next_keyword_position if next_keyword_position is not None else len(sentences)
+    return tuple(sentence for sentence in sentences[start_position:end_position] if not sentence.has_keyword)
+
+
+def _sentence_number(sentence_id: str) -> int:
+    """Return the numeric part of sentence IDs such as s1."""
+    return int(sentence_id.removeprefix("s"))
 
 
 def _is_bullet_lead_in(block_text: str) -> bool:

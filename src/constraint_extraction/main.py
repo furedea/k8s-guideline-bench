@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 for _stage in ("constraint_extraction", "common", ""):
     sys.path.insert(0, str(ROOT / "src" / _stage))
 
+import normative_audit  # noqa: E402
 import project_paths  # noqa: E402
 import source_selection  # noqa: E402
 import source_selection_config  # noqa: E402
@@ -56,6 +57,12 @@ def main() -> None:
             help="Generate atomic constraint review sheet CSV from normative constraints.",
         ),
     )
+    _configure_sentence_selection_tasks_parser(
+        subparsers.add_parser(
+            "sentence-selection-tasks",
+            help="Generate sentence selection task JSON for one-shot LLM normalization.",
+        ),
+    )
     arguments = parser.parse_args()
     arguments.func(arguments)
 
@@ -77,6 +84,12 @@ def _configure_review_sheet_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--interpretations-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     parser.set_defaults(func=_run_review_sheet)
+
+
+def _configure_sentence_selection_tasks_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--conventions-path", type=Path, default=None)
+    _ = parser.add_argument("--output-path", type=Path, default=None)
+    parser.set_defaults(func=_run_sentence_selection_tasks)
 
 
 def _run_source_selection(arguments: argparse.Namespace) -> None:
@@ -140,6 +153,21 @@ def _run_review_sheet(arguments: argparse.Namespace) -> None:
     filled = sum(1 for row in rows if row["interpretation"])
     print(f"Written {len(rows)} rows to {output_path}")
     print(f"Interpretations: {filled}/{len(rows)}")
+
+
+def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    docs_dir = project_root / "docs"
+    conventions_path = arguments.conventions_path or (docs_dir / "source" / "api-conventions.md")
+    output_path = arguments.output_path or (
+        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
+    )
+
+    tasks = normative_audit.extract_sentence_selection_tasks(conventions_path.read_text(encoding="utf-8"))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    normative_audit.save_sentence_selection_tasks(tasks, output_path)
+
+    print(f"Written {len(tasks)} tasks to {output_path}")
 
 
 def _resolve_repo_path(
