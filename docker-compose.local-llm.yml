@@ -47,6 +47,7 @@ services:
       - llm
     networks:
       - k8s-bench-local
+      - k8s-bench-proxy-host
     ports:
       - 127.0.0.1:8002:8002
     command:
@@ -61,3 +62,5 @@ networks:
   k8s-bench-local:
     name: k8s-bench-local
     internal: true
+  k8s-bench-proxy-host:
+    name: k8s-bench-proxy-host

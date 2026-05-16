@@ -123,6 +123,7 @@ def test_local_llm_compose_keeps_agent_network_internal_and_exposes_only_proxy_t
     assert "container_name: k8s-bench-proxy" in compose_text
     assert "http://k8s-bench-llm:8001/v1" in compose_text
     assert "127.0.0.1:8002:8002" in compose_text
+    assert "name: k8s-bench-proxy-host" in compose_text
     assert "--tool-call-parser" in compose_text
     assert "qwen3_coder" in compose_text
 
