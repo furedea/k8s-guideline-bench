@@ -136,7 +136,13 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
         docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
     )
     output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json")
+    print(f"[sentence-context-selection] loading tasks from {tasks_path}", flush=True)
     tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
+    print(
+        f"[sentence-context-selection] running codex for {len(tasks)} tasks "
+        f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s)",
+        flush=True,
+    )
     report = sentence_context_selection.select_sentence_contexts_with_codex(
         tasks,
         codex_command=arguments.codex_command,
@@ -145,9 +151,10 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[sentence-context-selection] writing report to {output_path}", flush=True)
     sentence_context_selection.save_context_selection_report(report, output_path)
-    print(f"Written {len(report.selections)} selections to {output_path}")
-    print(f"Detected {len(report.conflicts)} context selection conflicts")
+    print(f"[sentence-context-selection] selections={len(report.selections)}")
+    print(f"[sentence-context-selection] conflicts={len(report.conflicts)}")
 
 
 def _load_norms(path: Path) -> list[dict[str, Any]]:

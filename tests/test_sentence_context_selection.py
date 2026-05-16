@@ -78,6 +78,9 @@ def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
         assert command[-1] == "-"
         assert kwargs["input"] == "prompt"
         assert kwargs["timeout"] == 30
+        assert kwargs["stdout"] is None
+        assert kwargs["stderr"] is None
+        assert "capture_output" not in kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     run = mocker.patch("sentence_context_selection.subprocess.run", side_effect=fake_run)
@@ -91,6 +94,25 @@ def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
 
     assert response == '{"selections":[]}'
     assert "--model" in run.call_args.args[0]
+
+
+def test_run_codex_context_selection_can_capture_output_for_tests(mocker: MockerFixture) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        output_path = Path(command[command.index("--output-last-message") + 1])
+        output_path.write_text('{"selections":[]}', encoding="utf-8")
+        assert kwargs["capture_output"] is True
+        assert "stdout" not in kwargs
+        assert "stderr" not in kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="out", stderr="err")
+
+    mocker.patch("sentence_context_selection.subprocess.run", side_effect=fake_run)
+
+    response = sentence_context_selection.run_codex_context_selection(
+        "prompt",
+        stream_output=False,
+    )
+
+    assert response == '{"selections":[]}'
 
 
 def test_run_codex_context_selection_raises_on_non_zero_exit(mocker: MockerFixture) -> None:

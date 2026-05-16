@@ -61,6 +61,7 @@ def select_sentence_contexts_with_codex(
     codex_command: str = "codex",
     model: str | None = None,
     timeout_seconds: int = 1800,
+    stream_output: bool = True,
 ) -> SentenceContextSelectionReport:
     """Run Codex once to select context sentence IDs and validate the result."""
     response = run_codex_context_selection(
@@ -68,6 +69,7 @@ def select_sentence_contexts_with_codex(
         codex_command=codex_command,
         model=model,
         timeout_seconds=timeout_seconds,
+        stream_output=stream_output,
     )
     selected_ids_by_task_id = _parse_selection_response(response, tasks)
     conflicts = normative_audit.find_context_selection_conflicts(tasks, selected_ids_by_task_id)
@@ -88,6 +90,7 @@ def run_codex_context_selection(
     codex_command: str = "codex",
     model: str | None = None,
     timeout_seconds: int = 1800,
+    stream_output: bool = True,
 ) -> str:
     """Invoke `codex exec` one-shot and return its final message."""
     with tempfile.TemporaryDirectory() as directory:
@@ -108,20 +111,31 @@ def run_codex_context_selection(
         if model is not None:
             command.extend(("--model", model))
         command.append("-")
-        completed = subprocess.run(
-            command,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout_seconds,
-        )
+        if stream_output:
+            completed = subprocess.run(
+                command,
+                input=prompt,
+                stdout=None,
+                stderr=None,
+                text=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
+        else:
+            completed = subprocess.run(
+                command,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout_seconds,
+            )
         if completed.returncode != 0:
             raise CodexContextSelectionError(
                 command=tuple(command),
                 returncode=completed.returncode,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
+                stdout=completed.stdout or "",
+                stderr=completed.stderr or "",
             )
         if output_path.exists():
             return output_path.read_text(encoding="utf-8")
