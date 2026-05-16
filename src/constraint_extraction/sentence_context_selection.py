@@ -31,8 +31,14 @@ class SentenceContextSelectionReport(base.FrozenModel):
 class CodexContextSelectionError(RuntimeError):
     """`codex exec` failed while selecting source sentence contexts."""
 
-    def __init__(self, *, returncode: int, stdout: str, stderr: str) -> None:
-        super().__init__(f"codex exec failed with returncode={returncode}")
+    def __init__(self, *, command: tuple[str, ...], returncode: int, stdout: str, stderr: str) -> None:
+        message = f"codex exec failed with returncode={returncode}"
+        if stderr.strip():
+            message = f"{message}\n\nstderr:\n{stderr.strip()}"
+        if stdout.strip():
+            message = f"{message}\n\nstdout:\n{stdout.strip()}"
+        super().__init__(message)
+        self.command = command
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
@@ -94,8 +100,6 @@ def run_codex_context_selection(
             "exec",
             "--sandbox",
             "read-only",
-            "--ask-for-approval",
-            "never",
             "--output-schema",
             str(schema_path),
             "--output-last-message",
@@ -114,6 +118,7 @@ def run_codex_context_selection(
         )
         if completed.returncode != 0:
             raise CodexContextSelectionError(
+                command=tuple(command),
                 returncode=completed.returncode,
                 stdout=completed.stdout,
                 stderr=completed.stderr,

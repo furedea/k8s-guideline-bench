@@ -73,6 +73,7 @@ def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
         output_path = Path(command[command.index("--output-last-message") + 1])
         output_path.write_text('{"selections":[]}', encoding="utf-8")
         assert command[:2] == ["codex", "exec"]
+        assert "--ask-for-approval" not in command
         assert "--output-schema" in command
         assert command[-1] == "-"
         assert kwargs["input"] == "prompt"
@@ -101,9 +102,12 @@ def test_run_codex_context_selection_raises_on_non_zero_exit(mocker: MockerFixtu
     try:
         _ = sentence_context_selection.run_codex_context_selection("prompt")
     except sentence_context_selection.CodexContextSelectionError as exc:
+        assert exc.command[:4] == ("codex", "exec", "--sandbox", "read-only")
+        assert "--output-schema" in exc.command
         assert exc.returncode == 2
         assert exc.stdout == "out"
         assert exc.stderr == "err"
+        assert "stderr:\nerr" in str(exc)
     else:
         raise AssertionError("Expected codex failure to raise")
 
