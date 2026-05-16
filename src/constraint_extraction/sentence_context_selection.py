@@ -147,6 +147,16 @@ def select_sentence_contexts_with_codex(
     batch_size: int = 25,
 ) -> SentenceContextSelectionReport:
     """Run Codex in batches to select context sentence IDs and validate the result."""
+    codex_tasks = tuple(task for task in tasks if _has_context_candidates(task))
+    auto_selections = {
+        task.id: SentenceContextSelection(
+            task_id=task.id,
+            selected_context_sentence_ids=(),
+            original=task.main_sentence.text,
+        )
+        for task in tasks
+        if not _has_context_candidates(task)
+    }
     reports = tuple(
         _select_sentence_context_batch_with_codex(
             batch,
@@ -156,16 +166,22 @@ def select_sentence_contexts_with_codex(
             stream_output=stream_output,
             max_retries=max_retries,
         )
-        for batch in _task_batches(tasks, batch_size)
+        for batch in _task_batches(codex_tasks, batch_size)
     )
+    codex_selections = {selection.task_id: selection for report in reports for selection in report.selections}
     return SentenceContextSelectionReport(
-        selections=tuple(selection for report in reports for selection in report.selections),
+        selections=tuple((codex_selections | auto_selections)[task.id] for task in tasks),
         conflicts=tuple(conflict for report in reports for conflict in report.conflicts),
         invalid_context_selections=tuple(
             invalid_selection for report in reports for invalid_selection in report.invalid_context_selections
         ),
         retry_attempts=tuple(retry_attempt for report in reports for retry_attempt in report.retry_attempts),
     )
+
+
+def _has_context_candidates(task: normative_audit.SentenceSelectionTask) -> bool:
+    """Return whether a task has selectable context candidates."""
+    return bool(task.shared_context_sentences or task.context_sentences)
 
 
 def _select_sentence_context_batch_with_codex(

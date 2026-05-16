@@ -379,6 +379,30 @@ All JSON objects returned by an API MUST have the following fields:
     ]
 
 
+def test_extract_sentence_selection_tasks_offers_lead_in_for_following_bullets() -> None:
+    document = """
+## Section
+
+Required fields have the following properties:
+
+- They mark themselves as required explicitly with a `+required` comment tag.
+- They must not use pointer types.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert [task.main_sentence.text for task in tasks] == [
+        "They mark themselves as required explicitly with a `+required` comment tag.",
+        "They must not use pointer types.",
+    ]
+    assert [sentence.text for sentence in tasks[0].shared_context_sentences] == [
+        "Required fields have the following properties:",
+    ]
+    assert [sentence.text for sentence in tasks[1].shared_context_sentences] == [
+        "Required fields have the following properties:",
+    ]
+
+
 def test_extract_sentence_selection_tasks_offers_previous_keyword_for_referential_main_sentence() -> None:
     document = """
 ## Section
@@ -404,6 +428,22 @@ The API server should allow posting this field unset. Controllers must preserve 
 
     assert [task.main_sentence.id for task in tasks] == ["s1", "s2"]
     assert [sentence.id for sentence in tasks[1].context_sentences] == ["s1"]
+
+
+def test_extract_sentence_selection_tasks_offers_two_previous_keywords_for_the_two_reference() -> None:
+    document = """
+## Section
+
+Go field names must be PascalCase. JSON field names must be camelCase. Other than capitalization of the initial letter, the two should almost always match.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert [task.main_sentence.id for task in tasks] == ["s1", "s2", "s3"]
+    assert [sentence.text for sentence in tasks[2].context_sentences] == [
+        "Go field names must be PascalCase.",
+        "JSON field names must be camelCase.",
+    ]
 
 
 @pytest.mark.parametrize(
