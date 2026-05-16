@@ -194,6 +194,62 @@ Conditions are represented as a list. This collection should be treated as a map
     ]
 
 
+def test_extract_sentence_selection_artifacts_excludes_permissive_only_sentences_from_tasks() -> None:
+    document = """
+## Section
+
+Objects may report multiple conditions. New fields should explicitly set either `+optional` or `+required`. Resource implementers can include short names.
+""".strip()
+
+    artifacts = normative_audit.extract_sentence_selection_artifacts(document)
+
+    assert [task.main_sentence.text for task in artifacts.tasks] == [
+        "New fields should explicitly set either `+optional` or `+required`.",
+    ]
+    assert [
+        (record.sentence.text, record.selection_status, record.signal_tags) for record in artifacts.audit_records
+    ] == [
+        (
+            "Objects may report multiple conditions.",
+            normative_audit.SelectionStatus.EXCLUDED,
+            (normative_audit.SignalTag.PERMISSIVE,),
+        ),
+        (
+            "New fields should explicitly set either `+optional` or `+required`.",
+            normative_audit.SelectionStatus.INCLUDED,
+            (
+                normative_audit.SignalTag.OBLIGATION,
+                normative_audit.SignalTag.RECOMMENDATION,
+                normative_audit.SignalTag.PERMISSIVE,
+            ),
+        ),
+        (
+            "Resource implementers can include short names.",
+            normative_audit.SelectionStatus.EXCLUDED,
+            (normative_audit.SignalTag.PERMISSIVE,),
+        ),
+    ]
+
+
+def test_extract_sentence_selection_artifacts_includes_do_not_and_avoid_prohibitions() -> None:
+    document = """
+## Section
+
+Fields do not use underscores. Kinds avoid the deprecated FooController naming pattern.
+""".strip()
+
+    artifacts = normative_audit.extract_sentence_selection_artifacts(document)
+
+    assert [task.main_sentence.text for task in artifacts.tasks] == [
+        "Fields do not use underscores.",
+        "Kinds avoid the deprecated FooController naming pattern.",
+    ]
+    assert [record.signal_tags for record in artifacts.audit_records] == [
+        (normative_audit.SignalTag.PROHIBITION,),
+        (normative_audit.SignalTag.PROHIBITION, normative_audit.SignalTag.DEPRECATION),
+    ]
+
+
 def test_extract_sentence_selection_tasks_limits_context_to_neighboring_main_sentence_boundaries() -> None:
     document = """
 ## Section
@@ -260,6 +316,23 @@ Conditions are represented as a list. This collection should be treated as a map
         '"block_original": "Conditions are represented as a list. This collection should be treated as a map with a key of `type`."'
         in output_path.read_text(encoding="utf-8")
     )
+
+
+def test_save_sentence_selection_audit_writes_inclusion_summary_and_records(tmp_path: Path) -> None:
+    document = """
+## Section
+
+Objects may report multiple conditions. Fields must be set.
+""".strip()
+    artifacts = normative_audit.extract_sentence_selection_artifacts(document)
+    output_path = tmp_path / "audit.json"
+
+    normative_audit.save_sentence_selection_audit(artifacts.audit_records, output_path)
+
+    saved = output_path.read_text(encoding="utf-8")
+    assert '"included": 1' in saved
+    assert '"excluded": 1' in saved
+    assert '"exclusion_reason": "permissive_only"' in saved
 
 
 def test_find_context_selection_conflicts_flags_non_shared_context_selected_by_multiple_tasks() -> None:

@@ -20,6 +20,17 @@ _KEYWORD_RE = re.compile(
     r"required|recommended|preferred|deprecated"
     r")\b",
 )
+_OBLIGATION_RE = re.compile(r"\bMUST\b(?!\s+NOT\b)|\bmust\b(?!\s+not\b)|\brequired\b")
+_RECOMMENDATION_RE = re.compile(
+    r"\bSHOULD\b(?!\s+NOT\b)|\bshould\b(?!\s+not\b)|\brecommended\b|\bpreferred\b",
+)
+_PROHIBITION_RE = re.compile(
+    r"\bMUST\s+NOT\b|\bmust\s+not\b|"
+    r"\bSHOULD\s+NOT\b|\bshould\s+not\b|"
+    r"\bdo\s+not\b|\bdon't\b|\bavoid\b",
+)
+_DEPRECATION_RE = re.compile(r"\bdeprecated\b")
+_PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")
 
 
 class CandidateKind(enum.StrEnum):
@@ -34,6 +45,23 @@ class AuditStatus(enum.StrEnum):
 
     MATCHED = "matched"
     UNMATCHED = "unmatched"
+
+
+class SignalTag(enum.StrEnum):
+    """Internal source wording tags used for extraction audit."""
+
+    OBLIGATION = "obligation"
+    RECOMMENDATION = "recommendation"
+    PROHIBITION = "prohibition"
+    DEPRECATION = "deprecation"
+    PERMISSIVE = "permissive"
+
+
+class SelectionStatus(enum.StrEnum):
+    """Whether a signal-bearing sentence becomes a sentence selection task."""
+
+    INCLUDED = "included"
+    EXCLUDED = "excluded"
 
 
 class KeywordCandidate(base.FrozenModel):
@@ -52,6 +80,7 @@ class SourceSentence(base.FrozenModel):
     id: str
     text: str
     has_keyword: bool
+    signal_tags: tuple[SignalTag, ...] = ()
 
 
 class SentenceSelectionTask(base.FrozenModel):
@@ -75,6 +104,26 @@ class ContextSelectionConflict(base.FrozenModel):
     sentence_id: str
     sentence_text: str
     task_ids: tuple[str, ...]
+
+
+class SentenceSelectionAuditRecord(base.FrozenModel):
+    """Internal audit record for a signal-bearing source sentence."""
+
+    block_id: str
+    source_span: str
+    section: str
+    kind: CandidateKind
+    sentence: SourceSentence
+    selection_status: SelectionStatus
+    signal_tags: tuple[SignalTag, ...]
+    exclusion_reason: str | None = None
+
+
+class SentenceSelectionArtifacts(base.FrozenModel):
+    """Sentence selection tasks plus the internal inclusion audit."""
+
+    tasks: tuple[SentenceSelectionTask, ...]
+    audit_records: tuple[SentenceSelectionAuditRecord, ...]
 
 
 class KeywordNormativeRule(base.FrozenModel):
@@ -175,7 +224,13 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
 
 def extract_sentence_selection_tasks(document_text: str) -> tuple[SentenceSelectionTask, ...]:
     """Extract keyword sentences with their original block and nearby context candidates."""
+    return extract_sentence_selection_artifacts(document_text).tasks
+
+
+def extract_sentence_selection_artifacts(document_text: str) -> SentenceSelectionArtifacts:
+    """Extract sentence selection tasks and the inclusion audit."""
     tasks: list[SentenceSelectionTask] = []
+    audit_records: list[SentenceSelectionAuditRecord] = []
     for block_index, (start_line, end_line, section, kind, block_text) in enumerate(
         _collect_blocks(document_text),
         1,
@@ -185,6 +240,17 @@ def extract_sentence_selection_tasks(document_text: str) -> tuple[SentenceSelect
         sentences = _source_sentences(block_text)
         keyword_positions = tuple(index for index, sentence in enumerate(sentences) if sentence.has_keyword)
         shared_context_sentences = _shared_context_sentences(sentences, keyword_positions)
+        audit_records.extend(
+            _sentence_selection_audit_record(
+                block_id=block_id,
+                source_span=f"{start_line}-{end_line}",
+                section=section,
+                kind=kind,
+                sentence=sentence,
+            )
+            for sentence in sentences
+            if sentence.signal_tags
+        )
         tasks.extend(
             SentenceSelectionTask(
                 id=f"{block_id}_{sentences[keyword_position].id}",
@@ -203,7 +269,7 @@ def extract_sentence_selection_tasks(document_text: str) -> tuple[SentenceSelect
             )
             for keyword_position_index, keyword_position in enumerate(keyword_positions)
         )
-    return tuple(tasks)
+    return SentenceSelectionArtifacts(tasks=tuple(tasks), audit_records=tuple(audit_records))
 
 
 def build_selected_original(task: SentenceSelectionTask, selected_context_sentence_ids: tuple[str, ...]) -> str:
@@ -338,6 +404,24 @@ def save_sentence_selection_tasks(
 ) -> None:
     """Save sentence selection tasks for one-shot LLM normalization."""
     payload = {"tasks": [task.model_dump(mode="json") for task in tasks]}
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def save_sentence_selection_audit(
+    audit_records: tuple[SentenceSelectionAuditRecord, ...],
+    output_path: Path,
+) -> None:
+    """Save sentence selection inclusion audit as JSON."""
+    payload = {
+        "summary": {
+            "included": sum(record.selection_status == SelectionStatus.INCLUDED for record in audit_records),
+            "excluded": sum(record.selection_status == SelectionStatus.EXCLUDED for record in audit_records),
+        },
+        "records": [record.model_dump(mode="json") for record in audit_records],
+    }
     output_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -511,14 +595,61 @@ def _split_paragraph_sentences(block_text: str) -> tuple[str, ...]:
 
 def _source_sentences(block_text: str) -> tuple[SourceSentence, ...]:
     """Split one block into numbered source sentences."""
-    return tuple(
-        SourceSentence(
-            id=f"s{index}",
-            text=sentence,
-            has_keyword=_KEYWORD_RE.search(sentence) is not None,
+    source_sentences: list[SourceSentence] = []
+    for index, sentence in enumerate(_split_paragraph_sentences(block_text), 1):
+        signal_tags = _sentence_signal_tags(sentence)
+        source_sentences.append(
+            SourceSentence(
+                id=f"s{index}",
+                text=sentence,
+                has_keyword=_is_included_signal(signal_tags),
+                signal_tags=signal_tags,
+            ),
         )
-        for index, sentence in enumerate(_split_paragraph_sentences(block_text), 1)
+    return tuple(source_sentences)
+
+
+def _sentence_selection_audit_record(
+    *,
+    block_id: str,
+    source_span: str,
+    section: str,
+    kind: CandidateKind,
+    sentence: SourceSentence,
+) -> SentenceSelectionAuditRecord:
+    """Build an audit record for one signal-bearing sentence."""
+    selection_status = SelectionStatus.INCLUDED if sentence.has_keyword else SelectionStatus.EXCLUDED
+    exclusion_reason = "permissive_only" if selection_status == SelectionStatus.EXCLUDED else None
+    return SentenceSelectionAuditRecord(
+        block_id=block_id,
+        source_span=source_span,
+        section=section,
+        kind=kind,
+        sentence=sentence,
+        selection_status=selection_status,
+        signal_tags=sentence.signal_tags,
+        exclusion_reason=exclusion_reason,
     )
+
+
+def _sentence_signal_tags(text: str) -> tuple[SignalTag, ...]:
+    """Return internal source wording tags matched by a sentence."""
+    tags: list[SignalTag] = []
+    for pattern, tag in (
+        (_OBLIGATION_RE, SignalTag.OBLIGATION),
+        (_RECOMMENDATION_RE, SignalTag.RECOMMENDATION),
+        (_PROHIBITION_RE, SignalTag.PROHIBITION),
+        (_DEPRECATION_RE, SignalTag.DEPRECATION),
+        (_PERMISSIVE_RE, SignalTag.PERMISSIVE),
+    ):
+        if pattern.search(text):
+            tags.append(tag)
+    return tuple(tags)
+
+
+def _is_included_signal(signal_tags: tuple[SignalTag, ...]) -> bool:
+    """Return whether signal tags are strong enough to become a task."""
+    return any(tag != SignalTag.PERMISSIVE for tag in signal_tags)
 
 
 def _unknown_context_sentence_ids(

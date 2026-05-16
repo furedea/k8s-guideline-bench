@@ -89,6 +89,7 @@ def _configure_review_sheet_parser(parser: argparse.ArgumentParser) -> None:
 def _configure_sentence_selection_tasks_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--conventions-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
+    _ = parser.add_argument("--audit-output-path", type=Path, default=None)
     parser.set_defaults(func=_run_sentence_selection_tasks)
 
 
@@ -162,12 +163,18 @@ def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
     output_path = arguments.output_path or (
         docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
     )
+    audit_output_path = arguments.audit_output_path or (
+        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_audit.json"
+    )
 
-    tasks = normative_audit.extract_sentence_selection_tasks(conventions_path.read_text(encoding="utf-8"))
+    artifacts = normative_audit.extract_sentence_selection_artifacts(conventions_path.read_text(encoding="utf-8"))
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    normative_audit.save_sentence_selection_tasks(tasks, output_path)
+    audit_output_path.parent.mkdir(parents=True, exist_ok=True)
+    normative_audit.save_sentence_selection_tasks(artifacts.tasks, output_path)
+    normative_audit.save_sentence_selection_audit(artifacts.audit_records, audit_output_path)
 
-    print(f"Written {len(tasks)} tasks to {output_path}")
+    print(f"Written {len(artifacts.tasks)} tasks to {output_path}")
+    print(f"Written {len(artifacts.audit_records)} audit records to {audit_output_path}")
 
 
 def _resolve_repo_path(
