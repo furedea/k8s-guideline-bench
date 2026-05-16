@@ -67,7 +67,7 @@ The local config uses:
 - `MINI_SWE_AGENT_STEP_LIMIT`: defaults to `20`
 - `MINI_SWE_AGENT_COST_LIMIT`: optional mini-SWE-agent cost cap, unset by default
 
-The wrapper resolves mini-SWE-agent's bundled `mini.yaml`, writes `/out/mini_runtime.yaml` with `agent.step_limit` already applied, and passes only that generated file to `-c`. This avoids relying on Typer's repeated `-c` parsing or mini-SWE-agent's config-name lookup on different package versions.
+The wrapper resolves mini-SWE-agent's bundled `mini.yaml`, writes `/out/mini_runtime.yaml` with `agent.step_limit` already applied, and passes only that generated file to `-c`. This avoids relying on Typer's repeated `-c` parsing or mini-SWE-agent's config-name lookup on different package versions. Runtime config generation uses `/opt/mini-swe-agent/bin/python` so it runs in the same virtual environment as the `mini` executable and can import mini-SWE-agent's YAML dependencies.
 
 ## Failure Debugging
 
