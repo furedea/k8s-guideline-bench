@@ -160,6 +160,14 @@ task for s8:
 1. 後続の箇条書きを導入する文
 2. 直前文を指す語を含む文
 
+この追加は，完全な参照解決を目指すものではありません．目的は reviewer が見る `original` の根拠不足を減らすことです．
+
+そのため，候補を増やす規則は次の方針で切ります．
+
+- Markdown の構造から判断できるものは広く扱う
+- 代名詞や接続語の意味解釈が必要なものは，明らかに必要な候補を出すだけにする
+- 候補を増やしすぎて LLM に不要な文を選ばせるより，レビュー時に不足を見つけて規則を足す方を優先する
+
 ### 後続の箇条書きを導入する文
 
 重要キーワードを含む文が `:` で終わり，その直後に箇条書きが続く場合，その箇条書きは同じ説明単位の一部として扱います．
@@ -173,6 +181,21 @@ s3: - Avoid abbreviations.
 ```
 
 この場合，`s1` だけでは「どの rules か」が分かりません．そのため，`s2` と `s3` を `s1` の `context_sentences` に出します．これは自動採用ではなく，LLM が必要な文だけを選ぶ候補です．
+
+逆向きの形も扱います．つまり，`: ` で終わる paragraph の直後に箇条書きが続く場合，その paragraph の最後の文を，後続 bullet の `shared_context_sentences` に出します．
+
+例：
+
+```text
+Required fields have the following properties:
+
+- They mark themselves as required explicitly with a `+required` comment tag.
+- They are never omitted from serialized objects.
+```
+
+この場合，後続 bullet の `They` は paragraph の導入文に依存しています．導入文は同じ bullet group の複数 task に効くため，`shared_context_sentences` として扱います．そのため，複数 task が同じ導入文を選んでも conflict にはしません．
+
+この規則は，`Required fields` という文言に依存しません．条件は「同じ section 内で，paragraph が `:` で終わり，その直後に bullet group が続くこと」です．API conventions 以外の Markdown でも同じ構造なら同じ扱いになります．
 
 ### 直前文を指す語を含む文
 
@@ -200,6 +223,24 @@ it, its, itself, they, them, their, this, that, these, those, such
 ```
 
 この規則は完璧な参照解決ではありません．目的は，明らかに文脈不足になりやすい文に対して，LLM が選べる候補を機械的に増やすことです．
+
+ただし，`this`, `it`, `these` などは何を指すかが文によって大きく変わります．そのため，これらを見つけたからといって，前方の複数文を広く候補に入れることはしません．通常は直前の重要キーワード文だけを候補にします．
+
+例外として，`the two` や `both` のように「2 つの対象」を明示している文だけは，直前の重要キーワード文を最大 2 つまで候補にします．
+
+例：
+
+```text
+s1: Go field names must be PascalCase.
+s2: JSON field names must be camelCase.
+s3: Other than capitalization of the initial letter, the two should almost always match.
+```
+
+`s3` の `the two` は，直前 2 文の比較を指している可能性が高いです．このため，`s1` と `s2` を `s3` の候補に出します．
+
+この規則は，field name 専用ではありません．条件は「main sentence に `the two` または `both` があり，その前に重要キーワード文があること」です．一方で，`these`, `those`, `they` だけで直前 2 文を候補にすることはしません．それらは 1 文を指す場合も，節全体や段落全体を指す場合もあり，誤って広い文脈を混ぜやすいためです．
+
+`the former`, `the latter`, `respectively` のような表現は，今のところ追加していません．実例が出たら追加できますが，現時点では対象を広げすぎるより，明らかに必要な `the two` / `both` に留めます．
 
 ## LLM に渡すもの
 
