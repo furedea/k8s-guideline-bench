@@ -725,6 +725,7 @@ def _build_mini_swe_agent_invocation(model: str, docker_config: DockerAgentConfi
             docker_args=docker_config.docker_args,
         )
     assert provider.client.base_url is not None
+    assert provider.client.api_key_env is not None
     base_url = _container_base_url(provider.client.base_url, docker_config.docker_args)
     return BackendInvocation(
         model=_resolve_litellm_openai_model(model),
@@ -742,6 +743,8 @@ def _build_mini_swe_agent_invocation(model: str, docker_config: DockerAgentConfi
             f"OPENAI_API_BASE={base_url}",
             "-e",
             f"OPENAI_BASE_URL={base_url}",
+            "-e",
+            f"MINI_SWE_AGENT_AUTH_ENV={provider.client.api_key_env}",
             "-e",
             "MSWEA_COST_TRACKING=ignore_errors",
         ),

@@ -912,6 +912,7 @@ def test_run_docker_agentic_instance_injects_mini_swe_agent_local_provider_env(
     assert "--network=host" in docker_command
     assert "LOCAL_LLM_API_KEY" in docker_command
     assert "OPENAI_API_KEY" in docker_command
+    assert "MINI_SWE_AGENT_AUTH_ENV=LOCAL_LLM_API_KEY" in docker_command
     assert "MODEL=openai/Qwen/Qwen3.6-27B-FP8" in docker_command
     assert "OPENAI_API_BASE=http://localhost:8002/v1" in docker_command
     assert "OPENAI_BASE_URL=http://localhost:8002/v1" in docker_command

@@ -54,11 +54,17 @@ def test_mini_swe_agent_wrapper_dependencies_are_provided_by_image() -> None:
     assert "mini-swe-agent" in dockerfile_text
     assert "/usr/local/bin/mini" in dockerfile_text
     assert "mini --help" in dockerfile_text
+    assert "/opt/mini-swe-agent/bin/python" in dockerfile_text
+    assert "import yaml" in dockerfile_text
+    assert 'builtin_config_dir / "mini.yaml"' in dockerfile_text
     assert "MSWEA_CONFIGURED=1 mini" in wrapper_text
     assert "--agent-class default" in wrapper_text
     assert "--exit-immediately" in wrapper_text
     assert "MINI_SWE_AGENT_STEP_LIMIT" in wrapper_text
     assert "MINI_SWE_AGENT_COST_LIMIT" in wrapper_text
+    assert "MINI_SWE_AGENT_AUTH_ENV" in wrapper_text
+    assert "printf -v OPENAI_API_KEY" in wrapper_text
+    assert "export OPENAI_API_KEY" in wrapper_text
     assert "MINI_SWE_AGENT_PYTHON" in wrapper_text
     assert "/opt/mini-swe-agent/bin/python" in wrapper_text
     assert "MINI_SWE_AGENT_CONFIG_PATH" in wrapper_text

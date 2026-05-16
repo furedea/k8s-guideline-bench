@@ -460,6 +460,12 @@ def _load_agent_run_result(output_dir: Path, run_id: str) -> agent_runner.AgentR
             predicted_patch="",
             status=agent_runner.AgentRunStatus.FAILED,
         )
+    if metadata.status == agent_runner.AgentRunStatus.FAILED:
+        return agent_runner.AgentRunResult(
+            run_id=run_id,
+            predicted_patch="",
+            status=agent_runner.AgentRunStatus.FAILED,
+        )
     predicted_patch = (output_dir / "predicted_patch.diff").read_text(encoding="utf-8")
     return agent_runner.AgentRunResult(
         run_id=run_id,
