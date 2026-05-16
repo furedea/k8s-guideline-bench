@@ -114,16 +114,19 @@ def test_local_llm_proxy_image_serves_the_proxy_script_with_project_dependency()
     assert "!src/local_llm_proxy.py" in dockerignore_text
 
 
-def test_local_llm_compose_keeps_agent_network_internal_and_exposes_only_proxy_to_host() -> None:
+def test_local_llm_compose_keeps_agent_network_internal_and_allows_model_downloads() -> None:
     compose_text = (REPO_ROOT / "docker-compose.local-llm.yml").read_text()
 
     assert "name: k8s-bench-local" in compose_text
     assert "internal: true" in compose_text
+    assert "name: k8s-bench-llm" in compose_text
     assert "container_name: k8s-bench-llm" in compose_text
     assert "container_name: k8s-bench-proxy" in compose_text
+    assert "      - k8s-bench-llm" in compose_text
+    assert "      - k8s-bench-local" in compose_text
     assert "http://k8s-bench-llm:8001/v1" in compose_text
     assert "127.0.0.1:8002:8002" in compose_text
-    assert "name: k8s-bench-proxy-host" in compose_text
+    assert "k8s-bench-proxy-host" not in compose_text
     assert "--tool-call-parser" in compose_text
     assert "qwen3_coder" in compose_text
 

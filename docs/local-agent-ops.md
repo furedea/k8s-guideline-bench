@@ -4,18 +4,16 @@ This project can run local OpenAI-compatible models through the Docker agent bac
 
 ## Server Processes
 
-The local model stack uses a dedicated Docker network:
+The local model stack uses two Docker networks:
 
 - `k8s-bench-llm`: SGLang model server.
 - `k8s-bench-proxy`: Qwen non-thinking proxy.
-- `k8s-bench-local`: internal Docker network used by the model, proxy, and agent containers.
-- `k8s-bench-proxy-host`: host-publish network used only by the proxy.
+- `k8s-bench-local`: internal Docker network used by the proxy and agent containers.
+- `k8s-bench-llm`: normal Docker network used by the model server and proxy.
 
 Only the proxy is exposed to the host on `127.0.0.1:8002`. Agent containers reach the same proxy at `http://k8s-bench-proxy:8002/v1`. This keeps agent execution off `--network=host`, while preserving host-side access for smoke checks and judgment.
 
-The proxy is attached to both Docker networks. This is necessary because a container attached only to an `internal: true` network does not publish host ports reliably. Agent containers are still attached only to `k8s-bench-local`.
-
-The model weights must already be present under `~/.cache/huggingface` before starting this isolated stack. The internal Docker network intentionally prevents the model and agent containers from reaching external sites.
+The proxy is attached to both Docker networks. Agent containers are attached only to `k8s-bench-local`, so they can reach the proxy but cannot reach external sites. The model server is attached only to `k8s-bench-llm`, so it can fill missing Hugging Face cache files during startup.
 
 Start the local stack in one tmux pane:
 
