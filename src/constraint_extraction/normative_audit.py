@@ -35,7 +35,14 @@ _DEPRECATION_RE = re.compile(r"\bdeprecated\b")
 _PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")
 _EXAMPLE_SENTENCE_RE = re.compile(r"^Examples?:")
 _HTTP_STATUS_CODE_LABEL_RE = re.compile(r"^`?\d{3}\s+Status[A-Za-z0-9]+`?$")
-_REFERENTIAL_CONTEXT_RE = re.compile(r"^(?:It|They|This|These|Those|Instead|As such|Therefore|However)\b")
+_REFERENTIAL_CONTEXT_RE = re.compile(
+    r"^(?:"
+    r"It|They|This|That|These|Those|Such|"
+    r"Instead|Otherwise|Therefore|However|Thus|Hence|Consequently|Accordingly|"
+    r"As such|In that case|For this reason"
+    r")\b|"
+    r"\b(?:it|its|itself|they|them|their|this|that|these|those|such)\b",
+)
 
 
 class CandidateKind(enum.StrEnum):
