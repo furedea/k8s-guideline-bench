@@ -25,6 +25,17 @@ RUN python3 -m venv /opt/mini-swe-agent && \
     ln -s /opt/mini-swe-agent/bin/mini-extra /usr/local/bin/mini-extra && \
     mini --help >/dev/null
 
+RUN /opt/mini-swe-agent/bin/python - <<'PY'
+from minisweagent.config import builtin_config_dir
+
+import yaml
+
+config_path = builtin_config_dir / "mini.yaml"
+config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+assert isinstance(config, dict)
+assert "agent" in config
+PY
+
 COPY docker/run_mini_swe_agent.sh /usr/local/bin/run-mini-swe-agent
 RUN chmod +x /usr/local/bin/run-mini-swe-agent
 

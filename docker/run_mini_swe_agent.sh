@@ -28,6 +28,7 @@ function main() {
   readonly STEP_LIMIT="${MINI_SWE_AGENT_STEP_LIMIT:-20}"
   readonly COST_LIMIT="${MINI_SWE_AGENT_COST_LIMIT:-}"
   readonly TRAJECTORY_PATH="${MINI_SWE_AGENT_TRAJECTORY_PATH:-${OUTPUT_DIR}/trajectory.json}"
+  readonly AUTH_ENV_NAME="${MINI_SWE_AGENT_AUTH_ENV:-}"
   readonly MINI_PYTHON="${MINI_SWE_AGENT_PYTHON:-/opt/mini-swe-agent/bin/python}"
   readonly MINI_CONFIG_SOURCE_PATH="${MINI_SWE_AGENT_CONFIG_PATH:-$(
     "${MINI_PYTHON}" - <<'PY'
@@ -38,6 +39,13 @@ PY
   )}"
   readonly MINI_RUNTIME_CONFIG_PATH="${OUTPUT_DIR}/mini_runtime.yaml"
 
+  if [[ -n "${AUTH_ENV_NAME}" ]]; then
+    local _credential="${!AUTH_ENV_NAME:-}"
+    if [[ -n "${_credential}" ]]; then
+      printf -v OPENAI_API_KEY "%s" "${_credential}"
+      export OPENAI_API_KEY
+    fi
+  fi
   : "${OPENAI_API_KEY:?OPENAI_API_KEY is required by LiteLLM}"
 
   mkdir -p "${OUTPUT_DIR}" "$(dirname "${TRAJECTORY_PATH}")"
@@ -64,6 +72,7 @@ PY
     echo "python=${MINI_PYTHON}"
     echo "config_source=${MINI_CONFIG_SOURCE_PATH}"
     echo "runtime_config=${MINI_RUNTIME_CONFIG_PATH}"
+    echo "auth_env=${AUTH_ENV_NAME}"
     echo "step_limit=${STEP_LIMIT}"
     echo "cost_limit=${COST_LIMIT}"
     echo "trajectory_path=${TRAJECTORY_PATH}"
