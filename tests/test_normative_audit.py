@@ -287,12 +287,17 @@ When asserting a requirement in the positive, use "must". Examples: "must be gre
     ]
 
 
-def test_extract_sentence_selection_artifacts_excludes_error_codes_section_from_tasks() -> None:
+def test_extract_sentence_selection_artifacts_excludes_http_status_code_children_from_tasks() -> None:
     document = """
+## HTTP responses
+
+* `400 StatusBadRequest`
+  * Suggested client recovery behavior:
+    * Do not retry. Fix the request.
+
 ## Error codes
 
-* Suggested client recovery behavior:
-  * Do not retry. Fix the request.
+* Do not use numeric enums.
 
 ## Error messages
 
@@ -302,6 +307,7 @@ When asserting a requirement in the positive, use "must".
     artifacts = normative_audit.extract_sentence_selection_artifacts(document)
 
     assert [task.main_sentence.text for task in artifacts.tasks] == [
+        "Do not use numeric enums.",
         'When asserting a requirement in the positive, use "must".',
     ]
     assert [
@@ -309,10 +315,16 @@ When asserting a requirement in the positive, use "must".
         for record in artifacts.audit_records
     ] == [
         (
-            "Error codes",
+            "HTTP responses",
             "Do not retry.",
             normative_audit.SelectionStatus.EXCLUDED,
-            "excluded_section",
+            "http_status_code_child",
+        ),
+        (
+            "Error codes",
+            "Do not use numeric enums.",
+            normative_audit.SelectionStatus.INCLUDED,
+            None,
         ),
         (
             "Error messages",
