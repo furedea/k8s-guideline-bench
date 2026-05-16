@@ -87,3 +87,4 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert "[sentence-context-selection] writing report to" in output
     assert "[sentence-context-selection] selections=1" in output
     assert "[sentence-context-selection] conflicts=0" in output
+    assert "[sentence-context-selection] invalid_context_selections=0" in output

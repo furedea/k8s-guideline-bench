@@ -66,6 +66,30 @@ def test_select_sentence_contexts_with_codex_rejects_missing_task_selection(mock
         raise AssertionError("Expected missing task selection to fail")
 
 
+def test_select_sentence_contexts_with_codex_records_and_drops_unknown_context_ids(
+    mocker: MockerFixture,
+) -> None:
+    tasks = _tasks()
+    mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        return_value=json.dumps(
+            {
+                "selections": [
+                    {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s99"]},
+                    {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1"]},
+                ],
+            },
+        ),
+    )
+
+    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks)
+
+    assert report.selections[0].selected_context_sentence_ids == ("s1",)
+    assert report.invalid_context_selections[0].task_id == tasks[0].id
+    assert report.invalid_context_selections[0].sentence_id == "s99"
+    assert report.invalid_context_selections[0].reason == "unknown_context_sentence_id"
+
+
 def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
     mocker: MockerFixture,
 ) -> None:

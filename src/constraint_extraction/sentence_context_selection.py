@@ -21,11 +21,20 @@ class SentenceContextSelection(base.FrozenModel):
     original: str
 
 
+class InvalidContextSelection(base.FrozenModel):
+    """A context sentence ID selected by Codex but not available for the task."""
+
+    task_id: str
+    sentence_id: str
+    reason: str
+
+
 class SentenceContextSelectionReport(base.FrozenModel):
     """LLM sentence context selection report."""
 
     selections: tuple[SentenceContextSelection, ...]
     conflicts: tuple[normative_audit.ContextSelectionConflict, ...]
+    invalid_context_selections: tuple[InvalidContextSelection, ...] = ()
 
 
 class CodexContextSelectionError(RuntimeError):
@@ -72,16 +81,24 @@ def select_sentence_contexts_with_codex(
         stream_output=stream_output,
     )
     selected_ids_by_task_id = _parse_selection_response(response, tasks)
-    conflicts = normative_audit.find_context_selection_conflicts(tasks, selected_ids_by_task_id)
+    sanitized_ids_by_task_id, invalid_context_selections = _sanitize_selected_context_ids(
+        tasks,
+        selected_ids_by_task_id,
+    )
+    conflicts = normative_audit.find_context_selection_conflicts(tasks, sanitized_ids_by_task_id)
     selections = tuple(
         SentenceContextSelection(
             task_id=task.id,
-            selected_context_sentence_ids=selected_ids_by_task_id[task.id],
-            original=normative_audit.build_selected_original(task, selected_ids_by_task_id[task.id]),
+            selected_context_sentence_ids=sanitized_ids_by_task_id[task.id],
+            original=normative_audit.build_selected_original(task, sanitized_ids_by_task_id[task.id]),
         )
         for task in tasks
     )
-    return SentenceContextSelectionReport(selections=selections, conflicts=conflicts)
+    return SentenceContextSelectionReport(
+        selections=selections,
+        conflicts=conflicts,
+        invalid_context_selections=invalid_context_selections,
+    )
 
 
 def run_codex_context_selection(
@@ -162,6 +179,7 @@ def build_context_selection_prompt(tasks: tuple[normative_audit.SentenceSelectio
         "You are Codex. For each task, select the source sentence IDs that are needed as context for the "
         "main sentence.\n"
         "Select only IDs from shared_context_sentences or context_sentences.\n"
+        "Sentence IDs are local to each task. Do not select an ID unless it is listed in that exact task.\n"
         "Do not rewrite source text. Do not add explanations.\n"
         "Return JSON only with this schema:\n"
         '{"selections":[{"task_id":"...","selected_context_sentence_ids":["s1","s3"]}]}\n\n'
@@ -201,6 +219,36 @@ def _parse_selection_response(
             details.append(f"extra={', '.join(sorted(extra_task_ids))}")
         raise ValueError(f"Selection response task mismatch: {'; '.join(details)}")
     return selected_ids_by_task_id
+
+
+def _sanitize_selected_context_ids(
+    tasks: tuple[normative_audit.SentenceSelectionTask, ...],
+    selected_ids_by_task_id: dict[str, tuple[str, ...]],
+) -> tuple[dict[str, tuple[str, ...]], tuple[InvalidContextSelection, ...]]:
+    sanitized_ids_by_task_id: dict[str, tuple[str, ...]] = {}
+    invalid_context_selections: list[InvalidContextSelection] = []
+    for task in tasks:
+        allowed_ids = {
+            sentence.id
+            for sentence in (
+                *task.shared_context_sentences,
+                *task.context_sentences,
+            )
+        }
+        valid_ids: list[str] = []
+        for sentence_id in selected_ids_by_task_id[task.id]:
+            if sentence_id in allowed_ids:
+                valid_ids.append(sentence_id)
+                continue
+            invalid_context_selections.append(
+                InvalidContextSelection(
+                    task_id=task.id,
+                    sentence_id=sentence_id,
+                    reason="unknown_context_sentence_id",
+                ),
+            )
+        sanitized_ids_by_task_id[task.id] = tuple(dict.fromkeys(valid_ids))
+    return sanitized_ids_by_task_id, tuple(invalid_context_selections)
 
 
 def _sentence_selection_task_from_json(document: object) -> normative_audit.SentenceSelectionTask:

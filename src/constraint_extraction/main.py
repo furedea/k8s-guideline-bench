@@ -155,6 +155,17 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     sentence_context_selection.save_context_selection_report(report, output_path)
     print(f"[sentence-context-selection] selections={len(report.selections)}")
     print(f"[sentence-context-selection] conflicts={len(report.conflicts)}")
+    print(f"[sentence-context-selection] invalid_context_selections={len(report.invalid_context_selections)}")
+    for invalid_selection in report.invalid_context_selections[:10]:
+        print(
+            "[sentence-context-selection] invalid "
+            f"task={invalid_selection.task_id} sentence_id={invalid_selection.sentence_id} "
+            f"reason={invalid_selection.reason}",
+        )
+    if len(report.invalid_context_selections) > 10:
+        print(
+            f"[sentence-context-selection] invalid ... {len(report.invalid_context_selections) - 10} more",
+        )
 
 
 def _load_norms(path: Path) -> list[dict[str, Any]]:
