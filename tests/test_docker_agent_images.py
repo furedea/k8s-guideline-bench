@@ -62,6 +62,8 @@ def test_mini_swe_agent_wrapper_dependencies_are_provided_by_image() -> None:
     assert "--exit-immediately" in wrapper_text
     assert "MINI_SWE_AGENT_STEP_LIMIT" in wrapper_text
     assert "MINI_SWE_AGENT_COST_LIMIT" in wrapper_text
+    assert "MINI_SWE_AGENT_COST_TRACKING" in wrapper_text
+    assert "ignore_errors" in wrapper_text
     assert "MINI_SWE_AGENT_AUTH_ENV" in wrapper_text
     assert "printf -v OPENAI_API_KEY" in wrapper_text
     assert "export OPENAI_API_KEY" in wrapper_text
@@ -81,11 +83,20 @@ def test_mini_swe_agent_wrapper_dependencies_are_provided_by_image() -> None:
     assert "mini_swe_agent_stdout.log" in wrapper_text
     assert "mini_swe_agent_stderr.log" in wrapper_text
     assert "mini_swe_agent_settings.env" in wrapper_text
+    assert "cost_tracking=${COST_TRACKING}" in wrapper_text
     assert ': >|"${OUTPUT_DIR}/mini_swe_agent_stdout.log"' in wrapper_text
     assert ': >|"${OUTPUT_DIR}/mini_swe_agent_stderr.log"' in wrapper_text
     assert '} >|"${OUTPUT_DIR}/mini_swe_agent_settings.env"' in wrapper_text
     assert "set +x" in wrapper_text
     assert "-y" in wrapper_text
+
+
+def test_mini_swe_agent_image_keeps_kubernetes_clone_cacheable_when_wrapper_changes() -> None:
+    dockerfile_text = (REPO_ROOT / "docker" / "Dockerfile.mini_swe_agent").read_text()
+
+    assert dockerfile_text.index("RUN git clone") < dockerfile_text.index(
+        "COPY docker/run_mini_swe_agent.sh",
+    )
 
 
 def _load_json(path: Path) -> dict[str, Any]:

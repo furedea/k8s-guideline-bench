@@ -36,9 +36,6 @@ assert isinstance(config, dict)
 assert "agent" in config
 PY
 
-COPY docker/run_mini_swe_agent.sh /usr/local/bin/run-mini-swe-agent
-RUN chmod +x /usr/local/bin/run-mini-swe-agent
-
 ARG KUBERNETES_REPO_URL=https://github.com/kubernetes/kubernetes.git
 
 ENV KUBERNETES_CLONE_PATH=/k8s \
@@ -49,6 +46,9 @@ ENV KUBERNETES_CLONE_PATH=/k8s \
     PATH=/opt/mini-swe-agent/bin:$PATH
 
 RUN git clone --filter=blob:none "${KUBERNETES_REPO_URL}" "${KUBERNETES_CLONE_PATH}"
+
+COPY docker/run_mini_swe_agent.sh /usr/local/bin/run-mini-swe-agent
+RUN chmod +x /usr/local/bin/run-mini-swe-agent
 
 WORKDIR /work
 
