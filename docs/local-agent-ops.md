@@ -1,10 +1,10 @@
 # Local Agent Operations
 
-This project can run local OpenAI-compatible models through the Docker agent backend. The current local-100 setup is tuned for sam with Qwen3.6 FP8 served by SGLang and mini-SWE-agent as the editing scaffold.
+This project can run local OpenAI-compatible models through the Docker agent backend. The current local-100 setup uses Qwen3.6 FP8 served by SGLang and mini-SWE-agent as the editing scaffold.
 
 ## Server Processes
 
-Run the model server in one tmux pane:
+On sam, run the model server in one tmux pane:
 
 ```bash
 docker run --rm --gpus all \
@@ -20,6 +20,28 @@ docker run --rm --gpus all \
     --host 0.0.0.0 \
     --port 8001 \
     --api-key "$LOCAL_LLM_API_KEY" \
+    --context-length 65536 \
+    --mem-fraction-static 0.82
+```
+
+On lecun, use both RTX 3090 GPUs with tensor parallelism:
+
+```bash
+docker run --rm --gpus all \
+  --ipc=host \
+  --shm-size 32g \
+  --network=host \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  -e HF_TOKEN="$HF_TOKEN" \
+  lmsysorg/sglang:latest \
+  python3 -m sglang.launch_server \
+    --model-path Qwen/Qwen3.6-27B-FP8 \
+    --served-model-name Qwen/Qwen3.6-27B-FP8 \
+    --host 0.0.0.0 \
+    --port 8001 \
+    --api-key "$LOCAL_LLM_API_KEY" \
+    --tp 2 \
+    --disable-custom-all-reduce \
     --context-length 65536 \
     --mem-fraction-static 0.82
 ```
@@ -52,7 +74,7 @@ docker run --rm k8s-bench-agent-mini-swe-agent \
 
 ## Smoke Test
 
-Use the smoke script for the one-PR check:
+Use the smoke script for the one-PR agent check. It intentionally runs only the agent stage, not gold scope or judgment:
 
 ```bash
 export MINI_SWE_AGENT_STEP_LIMIT=20
@@ -67,7 +89,24 @@ The local config uses:
 - `MINI_SWE_AGENT_STEP_LIMIT`: defaults to `20`
 - `MINI_SWE_AGENT_COST_LIMIT`: optional mini-SWE-agent cost cap, unset by default
 
+The experiment spec names `LOCAL_LLM_API_KEY` as the local model credential. The runner passes that environment variable and `MINI_SWE_AGENT_AUTH_ENV=LOCAL_LLM_API_KEY` into the agent container. The wrapper then maps the configured credential into `OPENAI_API_KEY` inside the container, which is what LiteLLM expects.
+
 The wrapper resolves mini-SWE-agent's bundled `mini.yaml`, writes `/out/mini_runtime.yaml` with `agent.step_limit` already applied, and passes only that generated file to `-c`. This avoids relying on Typer's repeated `-c` parsing or mini-SWE-agent's config-name lookup on different package versions. Runtime config generation uses `/opt/mini-swe-agent/bin/python` so it runs in the same virtual environment as the `mini` executable and can import mini-SWE-agent's YAML dependencies.
+
+After agent smoke passes, run the later stages separately:
+
+```bash
+uv run python src/llm_judgment/run_gold_scope.py \
+  --spec config/experiment_spec_local_100.json \
+  --limit 1
+
+uv run python src/llm_judgment/run_judgment.py \
+  --spec config/experiment_spec_local_100.json \
+  --limit 1
+
+uv run python src/llm_judgment/compute_fair_report.py \
+  --spec config/experiment_spec_local_100.json
+```
 
 ## Failure Debugging
 
@@ -81,6 +120,7 @@ prompt.txt
 mini_swe_agent_stdout.log
 mini_swe_agent_stderr.log
 mini_swe_agent_settings.env
+mini_runtime.yaml
 trajectory.json
 ```
 
@@ -92,6 +132,7 @@ uv run python scripts/inspect_agent_run.py "$d" --top-messages 5 --tail 80
 sed -n '1,120p' "$d/run_metadata.json"
 sed -n '1,120p' "$d/agent_execution_config.json"
 sed -n '1,80p' "$d/mini_swe_agent_settings.env"
+sed -n '1,160p' "$d/mini_runtime.yaml"
 tail -200 "$d/mini_swe_agent_stderr.log"
 tail -200 "$d/mini_swe_agent_stdout.log"
 test -f "$d/trajectory.json" && wc -c "$d/trajectory.json"
