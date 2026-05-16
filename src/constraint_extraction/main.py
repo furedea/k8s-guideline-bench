@@ -83,6 +83,7 @@ def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser
     _ = parser.add_argument("--model", type=str, default=None)
     _ = parser.add_argument("--timeout-seconds", type=int, default=1800)
     _ = parser.add_argument("--max-retries", type=int, default=3)
+    _ = parser.add_argument("--stream-codex-output", action="store_true")
     parser.set_defaults(func=_run_sentence_context_selection)
 
 
@@ -142,7 +143,7 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     print(
         f"[sentence-context-selection] running codex for {len(tasks)} tasks "
         f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "
-        f"max_retries={arguments.max_retries})",
+        f"max_retries={arguments.max_retries}, stream_codex_output={arguments.stream_codex_output})",
         flush=True,
     )
     report = sentence_context_selection.select_sentence_contexts_with_codex(
@@ -151,6 +152,7 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
         model=arguments.model,
         timeout_seconds=arguments.timeout_seconds,
         max_retries=arguments.max_retries,
+        stream_output=arguments.stream_codex_output,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

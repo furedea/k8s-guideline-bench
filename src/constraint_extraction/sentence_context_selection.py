@@ -92,7 +92,7 @@ def select_sentence_contexts_with_codex(
     codex_command: str = "codex",
     model: str | None = None,
     timeout_seconds: int = 1800,
-    stream_output: bool = True,
+    stream_output: bool = False,
     max_retries: int = 3,
 ) -> SentenceContextSelectionReport:
     """Run Codex once to select context sentence IDs and validate the result."""
@@ -164,7 +164,7 @@ def run_codex_context_selection(
     codex_command: str = "codex",
     model: str | None = None,
     timeout_seconds: int = 1800,
-    stream_output: bool = True,
+    stream_output: bool = False,
 ) -> str:
     """Invoke `codex exec` one-shot and return its final message."""
     with tempfile.TemporaryDirectory() as directory:

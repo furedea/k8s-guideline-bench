@@ -162,7 +162,7 @@ def test_select_sentence_contexts_with_codex_fails_after_retry_limit(mocker: Moc
         raise AssertionError("Expected retry exhaustion to fail")
 
 
-def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
+def test_run_codex_context_selection_captures_output_by_default(
     mocker: MockerFixture,
 ) -> None:
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -174,9 +174,9 @@ def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
         assert command[-1] == "-"
         assert kwargs["input"] == "prompt"
         assert kwargs["timeout"] == 30
-        assert kwargs["stdout"] is None
-        assert kwargs["stderr"] is None
-        assert "capture_output" not in kwargs
+        assert kwargs["capture_output"] is True
+        assert "stdout" not in kwargs
+        assert "stderr" not in kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     run = mocker.patch("sentence_context_selection.subprocess.run", side_effect=fake_run)
@@ -192,20 +192,20 @@ def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
     assert "--model" in run.call_args.args[0]
 
 
-def test_run_codex_context_selection_can_capture_output_for_tests(mocker: MockerFixture) -> None:
+def test_run_codex_context_selection_can_stream_codex_output(mocker: MockerFixture) -> None:
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         output_path = Path(command[command.index("--output-last-message") + 1])
         output_path.write_text('{"selections":[]}', encoding="utf-8")
-        assert kwargs["capture_output"] is True
-        assert "stdout" not in kwargs
-        assert "stderr" not in kwargs
+        assert kwargs["stdout"] is None
+        assert kwargs["stderr"] is None
+        assert "capture_output" not in kwargs
         return subprocess.CompletedProcess(command, 0, stdout="out", stderr="err")
 
     mocker.patch("sentence_context_selection.subprocess.run", side_effect=fake_run)
 
     response = sentence_context_selection.run_codex_context_selection(
         "prompt",
-        stream_output=False,
+        stream_output=True,
     )
 
     assert response == '{"selections":[]}'
