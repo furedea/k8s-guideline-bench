@@ -28,6 +28,7 @@ function main() {
   readonly STEP_LIMIT="${MINI_SWE_AGENT_STEP_LIMIT:-20}"
   readonly COST_LIMIT="${MINI_SWE_AGENT_COST_LIMIT:-}"
   readonly COST_TRACKING="${MINI_SWE_AGENT_COST_TRACKING:-ignore_errors}"
+  readonly TOOL_CHOICE="${MINI_SWE_AGENT_TOOL_CHOICE:-required}"
   readonly TRAJECTORY_PATH="${MINI_SWE_AGENT_TRAJECTORY_PATH:-${OUTPUT_DIR}/trajectory.json}"
   readonly AUTH_ENV_NAME="${MINI_SWE_AGENT_AUTH_ENV:-}"
   readonly MINI_PYTHON="${MINI_SWE_AGENT_PYTHON:-/opt/mini-swe-agent/bin/python}"
@@ -58,7 +59,7 @@ PY
   : >|"${OUTPUT_DIR}/mini_swe_agent_stderr.log"
   exec > >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stdout.log")
   exec 2> >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stderr.log" >&2)
-  "${MINI_PYTHON}" - "${MINI_CONFIG_SOURCE_PATH}" "${MINI_RUNTIME_CONFIG_PATH}" "${STEP_LIMIT}" "${COST_TRACKING}" <<'PY'
+  "${MINI_PYTHON}" - "${MINI_CONFIG_SOURCE_PATH}" "${MINI_RUNTIME_CONFIG_PATH}" "${STEP_LIMIT}" "${COST_TRACKING}" "${TOOL_CHOICE}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -68,10 +69,12 @@ source_path = Path(sys.argv[1])
 runtime_path = Path(sys.argv[2])
 step_limit = int(sys.argv[3])
 cost_tracking = sys.argv[4]
+tool_choice = sys.argv[5]
 
 config = yaml.safe_load(source_path.read_text()) or {}
 config.setdefault("agent", {})["step_limit"] = step_limit
 config.setdefault("model", {})["cost_tracking"] = cost_tracking
+config.setdefault("model", {}).setdefault("model_kwargs", {})["tool_choice"] = tool_choice
 runtime_path.write_text(yaml.safe_dump(config, sort_keys=False))
 PY
   {
@@ -85,6 +88,7 @@ PY
     echo "step_limit=${STEP_LIMIT}"
     echo "cost_limit=${COST_LIMIT}"
     echo "cost_tracking=${COST_TRACKING}"
+    echo "tool_choice=${TOOL_CHOICE}"
     echo "trajectory_path=${TRAJECTORY_PATH}"
   } >|"${OUTPUT_DIR}/mini_swe_agent_settings.env"
 
