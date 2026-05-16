@@ -253,6 +253,76 @@ Do not use underscores. Avoid the deprecated FooController naming pattern. Field
     ]
 
 
+def test_extract_sentence_selection_artifacts_excludes_example_sentences_from_tasks() -> None:
+    document = """
+## Section
+
+When asserting a requirement in the positive, use "must". Examples: "must be greater than 0", "must match regex '[a-z]+'". Words like "should" imply that the assertion is optional, and must be avoided.
+""".strip()
+
+    artifacts = normative_audit.extract_sentence_selection_artifacts(document)
+
+    assert [task.main_sentence.text for task in artifacts.tasks] == [
+        'When asserting a requirement in the positive, use "must".',
+        'Words like "should" imply that the assertion is optional, and must be avoided.',
+    ]
+    assert [
+        (record.sentence.text, record.selection_status, record.exclusion_reason) for record in artifacts.audit_records
+    ] == [
+        (
+            'When asserting a requirement in the positive, use "must".',
+            normative_audit.SelectionStatus.INCLUDED,
+            None,
+        ),
+        (
+            'Examples: "must be greater than 0", "must match regex \'[a-z]+\'".',
+            normative_audit.SelectionStatus.EXCLUDED,
+            "example_sentence",
+        ),
+        (
+            'Words like "should" imply that the assertion is optional, and must be avoided.',
+            normative_audit.SelectionStatus.INCLUDED,
+            None,
+        ),
+    ]
+
+
+def test_extract_sentence_selection_artifacts_excludes_error_codes_section_from_tasks() -> None:
+    document = """
+## Error codes
+
+* Suggested client recovery behavior:
+  * Do not retry. Fix the request.
+
+## Error messages
+
+When asserting a requirement in the positive, use "must".
+""".strip()
+
+    artifacts = normative_audit.extract_sentence_selection_artifacts(document)
+
+    assert [task.main_sentence.text for task in artifacts.tasks] == [
+        'When asserting a requirement in the positive, use "must".',
+    ]
+    assert [
+        (record.section, record.sentence.text, record.selection_status, record.exclusion_reason)
+        for record in artifacts.audit_records
+    ] == [
+        (
+            "Error codes",
+            "Do not retry.",
+            normative_audit.SelectionStatus.EXCLUDED,
+            "excluded_section",
+        ),
+        (
+            "Error messages",
+            'When asserting a requirement in the positive, use "must".',
+            normative_audit.SelectionStatus.INCLUDED,
+            None,
+        ),
+    ]
+
+
 def test_extract_sentence_selection_tasks_limits_context_to_neighboring_main_sentence_boundaries() -> None:
     document = """
 ## Section

@@ -33,6 +33,8 @@ _PROHIBITION_RE = re.compile(
 )
 _DEPRECATION_RE = re.compile(r"\bdeprecated\b")
 _PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")
+_EXAMPLE_SENTENCE_RE = re.compile(r"^Examples?:")
+_EXCLUDED_TASK_SECTIONS = frozenset({"Error codes"})
 
 
 class CandidateKind(enum.StrEnum):
@@ -240,6 +242,7 @@ def extract_sentence_selection_artifacts(document_text: str) -> SentenceSelectio
         block_id = f"block_{block_index:04d}"
         block_original = _normalize_block_text(block_text)
         sentences = _source_sentences(block_text)
+        sentences = _exclude_section_tasks(sentences, section)
         keyword_positions = tuple(index for index, sentence in enumerate(sentences) if sentence.has_keyword)
         shared_context_sentences = _shared_context_sentences(sentences, keyword_positions)
         audit_records.extend(
@@ -604,11 +607,18 @@ def _source_sentences(block_text: str) -> tuple[SourceSentence, ...]:
             SourceSentence(
                 id=f"s{index}",
                 text=sentence,
-                has_keyword=_is_included_signal(signal_tags),
+                has_keyword=_is_included_signal(signal_tags) and not _is_example_sentence(sentence),
                 signal_tags=signal_tags,
             ),
         )
     return tuple(source_sentences)
+
+
+def _exclude_section_tasks(sentences: tuple[SourceSentence, ...], section: str) -> tuple[SourceSentence, ...]:
+    """Demote signal-bearing sentences from sections outside the extraction target."""
+    if section not in _EXCLUDED_TASK_SECTIONS:
+        return sentences
+    return tuple(sentence.model_copy(update={"has_keyword": False}) for sentence in sentences)
 
 
 def _sentence_selection_audit_record(
@@ -621,7 +631,11 @@ def _sentence_selection_audit_record(
 ) -> SentenceSelectionAuditRecord:
     """Build an audit record for one signal-bearing sentence."""
     selection_status = SelectionStatus.INCLUDED if sentence.has_keyword else SelectionStatus.EXCLUDED
-    exclusion_reason = "permissive_only" if selection_status == SelectionStatus.EXCLUDED else None
+    exclusion_reason = _sentence_selection_exclusion_reason(
+        sentence=sentence,
+        selection_status=selection_status,
+        section=section,
+    )
     return SentenceSelectionAuditRecord(
         block_id=block_id,
         source_span=source_span,
@@ -632,6 +646,22 @@ def _sentence_selection_audit_record(
         signal_tags=sentence.signal_tags,
         exclusion_reason=exclusion_reason,
     )
+
+
+def _sentence_selection_exclusion_reason(
+    *,
+    sentence: SourceSentence,
+    selection_status: SelectionStatus,
+    section: str,
+) -> str | None:
+    """Return why a signal-bearing sentence was not promoted to a task."""
+    if selection_status == SelectionStatus.INCLUDED:
+        return None
+    if section in _EXCLUDED_TASK_SECTIONS:
+        return "excluded_section"
+    if _is_example_sentence(sentence.text):
+        return "example_sentence"
+    return "permissive_only"
 
 
 def _sentence_signal_tags(text: str) -> tuple[SignalTag, ...]:
@@ -652,6 +682,11 @@ def _sentence_signal_tags(text: str) -> tuple[SignalTag, ...]:
 def _is_included_signal(signal_tags: tuple[SignalTag, ...]) -> bool:
     """Return whether signal tags are strong enough to become a task."""
     return any(tag != SignalTag.PERMISSIVE for tag in signal_tags)
+
+
+def _is_example_sentence(text: str) -> bool:
+    """Return whether a sentence is an example, not a rule statement."""
+    return _EXAMPLE_SENTENCE_RE.search(text) is not None
 
 
 def _unknown_context_sentence_ids(
