@@ -2,6 +2,7 @@ from pathlib import Path
 
 import normative_audit
 import normative_constraint
+import pytest
 
 
 def test_extract_keyword_candidates_keeps_wrapped_bullet_as_one_candidate() -> None:
@@ -166,3 +167,137 @@ Controllers must take care to consider how a `status` field will be handled in t
 
     assert len(candidates) == 1
     assert "controller crash and restart" in candidates[0].text
+
+
+def test_extract_sentence_selection_tasks_keeps_block_and_separates_main_from_context() -> None:
+    document = """
+## Section
+
+Conditions are represented as a list. This collection should be treated as a map with a key of `type`. More details follow later.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task.block_original == (
+        "Conditions are represented as a list. "
+        "This collection should be treated as a map with a key of `type`. "
+        "More details follow later."
+    )
+    assert task.main_sentence.id == "s2"
+    assert task.main_sentence.text == "This collection should be treated as a map with a key of `type`."
+    assert [sentence.id for sentence in task.shared_context_sentences] == ["s1"]
+    assert [sentence.id for sentence in task.context_sentences] == ["s3"]
+    assert [sentence.text for sentence in task.context_sentences] == [
+        "More details follow later.",
+    ]
+
+
+def test_extract_sentence_selection_tasks_limits_context_to_neighboring_main_sentence_boundaries() -> None:
+    document = """
+## Section
+
+Optionality affects API compatibility. Fields must be either optional or required. This avoids ambiguous client behavior. Older APIs sometimes relied on implicit optionality. New fields should explicitly set either `+optional` or `+required`. This is expected to become stricter in the future. Generated clients rely on this metadata. Validation must reject unset required fields. This protects clients from incomplete objects.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert len(tasks) == 3
+    assert [task.main_sentence.id for task in tasks] == ["s2", "s5", "s8"]
+    assert [sentence.id for sentence in tasks[0].shared_context_sentences] == ["s1"]
+    assert [sentence.id for sentence in tasks[0].context_sentences] == ["s3", "s4"]
+    assert [sentence.id for sentence in tasks[1].shared_context_sentences] == ["s1"]
+    assert [sentence.id for sentence in tasks[1].context_sentences] == ["s3", "s4", "s6", "s7"]
+    assert [sentence.id for sentence in tasks[2].shared_context_sentences] == ["s1"]
+    assert [sentence.id for sentence in tasks[2].context_sentences] == ["s6", "s7", "s9"]
+
+
+def test_build_selected_original_always_includes_main_sentence_in_source_order() -> None:
+    document = """
+## Section
+
+Conditions are represented as a list. This collection should be treated as a map with a key of `type`. More details follow later.
+""".strip()
+    task = normative_audit.extract_sentence_selection_tasks(document)[0]
+
+    original = normative_audit.build_selected_original(task, ("s3", "s1"))
+
+    assert original == (
+        "Conditions are represented as a list. "
+        "This collection should be treated as a map with a key of `type`. "
+        "More details follow later."
+    )
+
+
+def test_build_selected_original_rejects_unknown_context_sentence_ids() -> None:
+    document = """
+## Section
+
+Conditions are represented as a list. This collection should be treated as a map with a key of `type`.
+""".strip()
+    task = normative_audit.extract_sentence_selection_tasks(document)[0]
+
+    with pytest.raises(ValueError, match="Unknown context sentence IDs"):
+        normative_audit.build_selected_original(task, ("s99",))
+
+
+def test_save_sentence_selection_tasks_writes_codex_ready_json(tmp_path: Path) -> None:
+    document = """
+## Section
+
+Conditions are represented as a list. This collection should be treated as a map with a key of `type`.
+""".strip()
+    output_path = tmp_path / "tasks.json"
+
+    normative_audit.save_sentence_selection_tasks(
+        normative_audit.extract_sentence_selection_tasks(document),
+        output_path,
+    )
+
+    assert output_path.read_text(encoding="utf-8").startswith('{\n  "tasks": [\n')
+    assert (
+        '"block_original": "Conditions are represented as a list. This collection should be treated as a map with a key of `type`."'
+        in output_path.read_text(encoding="utf-8")
+    )
+
+
+def test_find_context_selection_conflicts_flags_non_shared_context_selected_by_multiple_tasks() -> None:
+    document = """
+## Section
+
+Optionality affects API compatibility. Fields must be either optional or required. This avoids ambiguous client behavior. New fields should explicitly set either `+optional` or `+required`.
+""".strip()
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    conflicts = normative_audit.find_context_selection_conflicts(
+        tasks,
+        {
+            tasks[0].id: ("s3",),
+            tasks[1].id: ("s3",),
+        },
+    )
+
+    assert len(conflicts) == 1
+    assert conflicts[0].sentence_id == "s3"
+    assert conflicts[0].sentence_text == "This avoids ambiguous client behavior."
+    assert conflicts[0].task_ids == (tasks[0].id, tasks[1].id)
+
+
+def test_find_context_selection_conflicts_allows_shared_intro_selected_by_multiple_tasks() -> None:
+    document = """
+## Section
+
+Optionality affects API compatibility. Fields must be either optional or required. This avoids ambiguous client behavior. New fields should explicitly set either `+optional` or `+required`.
+""".strip()
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    conflicts = normative_audit.find_context_selection_conflicts(
+        tasks,
+        {
+            tasks[0].id: ("s1",),
+            tasks[1].id: ("s1",),
+        },
+    )
+
+    assert conflicts == ()

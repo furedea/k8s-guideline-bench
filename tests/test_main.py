@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 import main
@@ -45,3 +46,25 @@ def test_resolve_repo_path_requires_explicit_input(mocker: MockerFixture) -> Non
 
     with pytest.raises(ValueError):
         _ = main._resolve_repo_path(Path("/tmp/project"), None, None)
+
+
+def test_run_sentence_selection_tasks_writes_json_from_source_markdown(tmp_path: Path) -> None:
+    conventions_path = tmp_path / "api-conventions.md"
+    conventions_path.write_text(
+        """
+## Section
+
+Conditions are represented as a list. This collection should be treated as a map with a key of `type`.
+""".strip(),
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "tasks.json"
+
+    main._run_sentence_selection_tasks(
+        argparse.Namespace(
+            conventions_path=conventions_path,
+            output_path=output_path,
+        ),
+    )
+
+    assert '"main_sentence": {' in output_path.read_text(encoding="utf-8")
