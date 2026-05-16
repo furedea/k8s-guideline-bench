@@ -1,0 +1,15 @@
+# Dockerfile for the local LLM proxy used by isolated local-agent runs.
+#
+# Build:
+#   docker build -t k8s-bench-local-llm-proxy -f docker/Dockerfile.local_llm_proxy .
+
+FROM python:3.14-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir httpx==0.28.1
+
+COPY src/local_llm_proxy.py /app/local_llm_proxy.py
+
+ENTRYPOINT ["python", "/app/local_llm_proxy.py"]
+CMD ["--upstream", "http://k8s-bench-llm:8001/v1", "--host", "0.0.0.0", "--port", "8002"]

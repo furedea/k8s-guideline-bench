@@ -220,6 +220,7 @@ RUN_METADATA_FILENAME = "run_metadata.json"
 AGENT_TIMEOUT_EXIT_CODE = 124
 AGENT_REPORTED_ERROR_EXIT_CODE = 1
 AGENT_EMPTY_PATCH_EXIT_CODE = 125
+MINI_SWE_AGENT_UNSUBMITTED_EXIT_CODE = 125
 OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
 OPENCODE_CONFIG_SCHEMA = "https://opencode.ai/config.json"
 OPENAI_COMPATIBLE_PACKAGE = "@ai-sdk/openai-compatible"
@@ -227,6 +228,11 @@ HOST_INTERNAL_NAME = "host.docker.internal"
 HOST_INTERNAL_DOCKER_ARG = f"--add-host={HOST_INTERNAL_NAME}:host-gateway"
 HOST_NETWORK_DOCKER_ARG = "--network=host"
 LOCALHOST_NAMES = frozenset({"localhost", "127.0.0.1", "::1"})
+EXTERNAL_NETWORK_COMMAND_MARKERS = (
+    "patch-diff.githubusercontent.com",
+    "github.com/kubernetes/kubernetes/pull",
+    "raw.githubusercontent.com/kubernetes/kubernetes",
+)
 AGENT_EXECUTION_CONFIG_FILENAME = "agent_execution_config.json"
 MINI_SWE_AGENT_TRAJECTORY_FILENAME = "trajectory.json"
 
@@ -439,7 +445,7 @@ def _run_docker_agent_on_instance(
     raw_response = _render_docker_raw_response(completed)
     _ = (output_dir / "raw_response.txt").write_text(raw_response, encoding="utf-8")
     if completed.returncode != 0:
-        failure_reason = _classify_agent_failure(completed)
+        failure_reason = _classify_agent_run_failure(output_dir, completed)
         _write_run_metadata(
             output_dir=output_dir,
             instance=instance,
@@ -492,6 +498,43 @@ def _run_docker_agent_on_instance(
             predicted_patch_path=predicted_patch_path,
             exit_code=completed.returncode,
             failure_reason=_classify_empty_patch_failure(output_dir, completed),
+        )
+        if not config.keep_failed_worktree:
+            shutil.rmtree(worktree_dir, ignore_errors=True)
+        logger.warning(
+            {
+                "action": "agent_run_failed",
+                "run_id": config.run_id,
+                "pr_number": instance.detail.pr_number,
+                "exit_code": completed.returncode,
+            }
+        )
+        return AgentRunResult(run_id=config.run_id, predicted_patch="", status=AgentRunStatus.FAILED)
+    successful_run_failure_reason = _classify_successful_agent_run_failure(output_dir, config)
+    if successful_run_failure_reason is not None:
+        completed = subprocess.CompletedProcess(
+            args=completed.args,
+            returncode=MINI_SWE_AGENT_UNSUBMITTED_EXIT_CODE,
+            stdout=completed.stdout,
+            stderr="\n".join(
+                part
+                for part in (
+                    completed.stderr.rstrip("\n"),
+                    f"Mini-SWE-agent run rejected: {successful_run_failure_reason}.",
+                )
+                if part
+            ),
+        )
+        _ = (output_dir / "raw_response.txt").write_text(_render_docker_raw_response(completed), encoding="utf-8")
+        _write_run_metadata(
+            output_dir=output_dir,
+            instance=instance,
+            config=config,
+            status=AgentRunStatus.FAILED,
+            started_at=started_at,
+            predicted_patch_path=predicted_patch_path,
+            exit_code=completed.returncode,
+            failure_reason=successful_run_failure_reason,
         )
         if not config.keep_failed_worktree:
             shutil.rmtree(worktree_dir, ignore_errors=True)
@@ -1011,6 +1054,19 @@ def _classify_empty_patch_failure(output_dir: Path, completed: subprocess.Comple
     return _classify_agent_failure(completed)
 
 
+def _classify_agent_run_failure(output_dir: Path, completed: subprocess.CompletedProcess[str]) -> str:
+    trajectory_reason = _classify_mini_swe_agent_trajectory_failure(output_dir / MINI_SWE_AGENT_TRAJECTORY_FILENAME)
+    if trajectory_reason is not None:
+        return trajectory_reason
+    return _classify_agent_failure(completed)
+
+
+def _classify_successful_agent_run_failure(output_dir: Path, config: AgentRunConfig) -> str | None:
+    if config.docker.backend != AgentBackend.MINI_SWE_AGENT:
+        return None
+    return _classify_mini_swe_agent_trajectory_failure(output_dir / MINI_SWE_AGENT_TRAJECTORY_FILENAME)
+
+
 def _classify_mini_swe_agent_trajectory_failure(trajectory_path: Path) -> str | None:
     reason: str | None = None
     if trajectory_path.exists():
@@ -1019,17 +1075,60 @@ def _classify_mini_swe_agent_trajectory_failure(trajectory_path: Path) -> str | 
         except OSError, json.JSONDecodeError:
             document = None
         if isinstance(document, dict):
+            if _trajectory_contains_external_network_access(document):
+                return "external_network_access"
             info = document.get("info")
             exit_status = info.get("exit_status") if isinstance(info, dict) else None
             if isinstance(exit_status, str):
                 normalized = exit_status.replace("_", "").replace("-", "").lower()
-                if normalized == "limitsexceeded":
+                if normalized == "submitted":
+                    reason = None
+                elif normalized == "limitsexceeded":
                     reason = "agent_budget_exceeded"
                 elif "context" in normalized and "exceeded" in normalized:
                     reason = "context_window_exceeded"
                 elif normalized == "formaterror":
                     reason = "agent_reported_error"
+                else:
+                    reason = "agent_reported_error"
     return reason
+
+
+def _trajectory_contains_external_network_access(document: dict[str, object]) -> bool:
+    return any(_is_external_network_command(command) for command in _trajectory_action_commands(document))
+
+
+def _trajectory_action_commands(document: dict[str, object]) -> tuple[str, ...]:
+    messages = document.get("messages")
+    if not isinstance(messages, list):
+        return ()
+    commands: list[str] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        message_document = cast(dict[str, object], message)
+        extra = message_document.get("extra")
+        if not isinstance(extra, dict):
+            continue
+        extra_document = cast(dict[str, object], extra)
+        actions = extra_document.get("actions")
+        if not isinstance(actions, list):
+            continue
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            action_document = cast(dict[str, object], action)
+            command = action_document.get("command")
+            if isinstance(command, str):
+                commands.append(command)
+    return tuple(commands)
+
+
+def _is_external_network_command(command: str) -> bool:
+    normalized = command.lower()
+    if any(marker in normalized for marker in EXTERNAL_NETWORK_COMMAND_MARKERS):
+        return True
+    return ("curl " in normalized or normalized.startswith("curl")) and "https://" in normalized
 
 
 def _is_previous_run_skippable(metadata_path: Path) -> bool:

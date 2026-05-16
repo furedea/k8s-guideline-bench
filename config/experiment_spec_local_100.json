@@ -20,7 +20,7 @@
       "image": "k8s-bench-agent-mini-swe-agent",
       "backend": "mini_swe_agent",
       "agent_command": "run-mini-swe-agent",
-      "docker_args": ["--network=host"],
+      "docker_args": ["--network=k8s-bench-local"],
       "env_passthrough": ["MINI_SWE_AGENT_STEP_LIMIT", "MINI_SWE_AGENT_COST_LIMIT"],
       "agent_timeout_seconds": 2400,
       "openai_compatible_provider": {
@@ -29,7 +29,7 @@
         "client": {
           "client_type": "openai_compatible",
           "api_key_env": "LOCAL_LLM_API_KEY",
-          "base_url": "http://localhost:8002/v1"
+          "base_url": "http://k8s-bench-proxy:8002/v1"
         },
         "context_limit": 65536,
         "output_limit": 4096

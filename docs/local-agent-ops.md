@@ -4,55 +4,34 @@ This project can run local OpenAI-compatible models through the Docker agent bac
 
 ## Server Processes
 
-On sam, run the model server in one tmux pane:
+The local model stack uses a dedicated Docker network:
+
+- `k8s-bench-llm`: SGLang model server.
+- `k8s-bench-proxy`: Qwen non-thinking proxy.
+- `k8s-bench-local`: internal Docker network used by the model, proxy, and agent containers.
+
+Only the proxy is exposed to the host on `127.0.0.1:8002`. Agent containers reach the same proxy at `http://k8s-bench-proxy:8002/v1`. This keeps agent execution off `--network=host`, while preserving host-side access for smoke checks and judgment.
+
+The model weights must already be present under `~/.cache/huggingface` before starting this isolated stack. The internal Docker network intentionally prevents the model and agent containers from reaching external sites.
+
+Start the local stack in one tmux pane:
 
 ```bash
-docker run --rm --gpus all \
-  --ipc=host \
-  --shm-size 32g \
-  --network=host \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  -e HF_TOKEN="$HF_TOKEN" \
-  lmsysorg/sglang:latest \
-  python3 -m sglang.launch_server \
-    --model-path Qwen/Qwen3.6-27B-FP8 \
-    --served-model-name Qwen/Qwen3.6-27B-FP8 \
-    --host 0.0.0.0 \
-    --port 8001 \
-    --api-key "$LOCAL_LLM_API_KEY" \
-    --context-length 65536 \
-    --mem-fraction-static 0.82
+docker compose -f docker-compose.local-llm.yml up --build
 ```
 
-On lecun, use both RTX 3090 GPUs with tensor parallelism:
+The compose file is tuned for lecun's two RTX 3090 GPUs with tensor parallelism:
+
+- `--tp ${LOCAL_LLM_TP:-2}`
+- `--disable-custom-all-reduce`
+- `--context-length 65536`
+- `--mem-fraction-static 0.82`
+- `--tool-call-parser qwen3_coder`
+
+On a single-GPU server such as sam, start the stack with `LOCAL_LLM_TP=1`:
 
 ```bash
-docker run --rm --gpus all \
-  --ipc=host \
-  --shm-size 32g \
-  --network=host \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  -e HF_TOKEN="$HF_TOKEN" \
-  lmsysorg/sglang:latest \
-  python3 -m sglang.launch_server \
-    --model-path Qwen/Qwen3.6-27B-FP8 \
-    --served-model-name Qwen/Qwen3.6-27B-FP8 \
-    --host 0.0.0.0 \
-    --port 8001 \
-    --api-key "$LOCAL_LLM_API_KEY" \
-    --tp 2 \
-    --disable-custom-all-reduce \
-    --context-length 65536 \
-    --mem-fraction-static 0.82
-```
-
-Run the Qwen non-thinking proxy in another pane:
-
-```bash
-uv run python src/local_llm_proxy.py \
-  --upstream http://localhost:8001/v1 \
-  --host 127.0.0.1 \
-  --port 8002
+LOCAL_LLM_TP=1 docker compose -f docker-compose.local-llm.yml up --build
 ```
 
 ## Agent Image
@@ -72,6 +51,48 @@ docker run --rm k8s-bench-agent-mini-swe-agent \
   sh -lc 'command -v mini && command -v run-mini-swe-agent && mini --help >/dev/null'
 ```
 
+Verify host-side proxy access:
+
+```bash
+curl http://localhost:8002/v1/chat/completions \
+  -H "Authorization: Bearer ${LOCAL_LLM_API_KEY:?LOCAL_LLM_API_KEY is required}" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"Qwen/Qwen3.6-27B-FP8","messages":[{"role":"user","content":"Return JSON only:{\"ok\":true}"}],"max_tokens":64}'
+```
+
+Verify agent-network proxy access:
+
+```bash
+docker run --rm --network k8s-bench-local \
+  --env LOCAL_LLM_API_KEY \
+  k8s-bench-agent-mini-swe-agent \
+  /opt/mini-swe-agent/bin/python - http://k8s-bench-proxy:8002/v1 Qwen/Qwen3.6-27B-FP8 <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+base_url = sys.argv[1]
+model = sys.argv[2]
+payload = {
+    "model": model,
+    "messages": [{"role": "user", "content": 'Return JSON only:{"ok":true}'}],
+    "max_tokens": 64,
+}
+request = urllib.request.Request(
+    f"{base_url}/chat/completions",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={
+        "Authorization": f"Bearer {os.environ['LOCAL_LLM_API_KEY']}",
+        "Content-Type": "application/json",
+    },
+    method="POST",
+)
+with urllib.request.urlopen(request, timeout=60) as response:
+    print(response.read().decode("utf-8"))
+PY
+```
+
 ## Smoke Test
 
 Use the smoke script for the one-PR agent check. It intentionally runs only the agent stage, not gold scope or judgment:
@@ -85,6 +106,9 @@ The local config uses:
 
 - `run_id_prefix`: `local100_mini_qwen36_fp8`
 - `context_limit`: `65536`
+- agent base URL: `http://k8s-bench-proxy:8002/v1`
+- judge base URL: `http://localhost:8002/v1`
+- agent Docker network: `k8s-bench-local`
 - `agent_timeout_seconds`: `2400`
 - `MINI_SWE_AGENT_STEP_LIMIT`: defaults to `20`
 - `MINI_SWE_AGENT_COST_LIMIT`: optional mini-SWE-agent cost cap, unset by default
@@ -143,6 +167,7 @@ Common `failure_reason` values:
 - `timeout`: the outer Docker agent timeout fired.
 - `agent_budget_exceeded`: mini-SWE-agent hit its step or cost budget.
 - `context_window_exceeded`: the model context window was exceeded.
+- `external_network_access`: mini-SWE-agent attempted to fetch external network resources during the run.
 - `empty_patch`: the agent exited successfully but produced no diff.
 - `bad_request`, `rate_limited`, `agent_reported_error`, `agent_error`: API or scaffold failures.
 
