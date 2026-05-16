@@ -53,6 +53,8 @@ PY
   : "${OPENAI_API_KEY:?OPENAI_API_KEY is required by LiteLLM}"
 
   mkdir -p "${OUTPUT_DIR}" "$(dirname "${TRAJECTORY_PATH}")"
+  : >|"${OUTPUT_DIR}/mini_swe_agent_stdout.log"
+  : >|"${OUTPUT_DIR}/mini_swe_agent_stderr.log"
   exec > >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stdout.log")
   exec 2> >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stderr.log" >&2)
   "${MINI_PYTHON}" - "${MINI_CONFIG_SOURCE_PATH}" "${MINI_RUNTIME_CONFIG_PATH}" "${STEP_LIMIT}" <<'PY'
@@ -80,7 +82,7 @@ PY
     echo "step_limit=${STEP_LIMIT}"
     echo "cost_limit=${COST_LIMIT}"
     echo "trajectory_path=${TRAJECTORY_PATH}"
-  } >"${OUTPUT_DIR}/mini_swe_agent_settings.env"
+  } >|"${OUTPUT_DIR}/mini_swe_agent_settings.env"
 
   local -a _mini_args=(
     --agent-class default
