@@ -29,7 +29,7 @@
 
 | # | 段階 | ディレクトリ | CLI | 主な入出力 |
 | --- | --- | --- | --- | --- |
-| 1 | 制約抽出 | `src/constraint_extraction/` | `uv run python src/constraint_extraction/main.py {sentence-selection-tasks,sentence-context-selection,review-sheet}` | ガイドライン原文 → Atomic Constraints（JSON/CSV） |
+| 1 | 制約抽出 | `src/constraint_extraction/` | `uv run python src/constraint_extraction/main.py` | ガイドライン原文 → Atomic Constraints（JSON/CSV） |
 | 2 | データセット構築 | `src/dataset_construction/` | `uv run python src/dataset_construction/build_dataset.py --spec config/dataset_spec.json` | Kubernetes リポジトリ + GitHub PR metadata → `datasets/<pr_number>/` |
 | 3 | Agent 実行 | `src/agent_execution/` | `uv run python src/agent_execution/run_agent.py --spec config/experiment_spec_pilot.json` | `base/` + 規約 → `predicted_patch.diff` |
 | 4 | LLM-as-a-Judge | `src/llm_judgment/` | `uv run python src/llm_judgment/run_judgment.py --spec config/experiment_spec_pilot.json` | `predicted_patch.diff` + 規約 → `judgments.json` + 集計 |
