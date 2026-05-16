@@ -3,35 +3,33 @@ import subprocess
 from pathlib import Path
 
 import normative_audit
-import sentence_context_selection
+import sentence_constraint_candidate
 import sentence_interpretation
 from pytest_mock import MockerFixture
 
 
-def test_build_interpretation_tasks_joins_sentence_tasks_with_selected_originals() -> None:
+def test_build_interpretation_tasks_uses_draft_constraints() -> None:
     sentence_tasks = _sentence_tasks()
-    context_report = sentence_context_selection.SentenceContextSelectionReport(
-        selections=(
-            sentence_context_selection.SentenceContextSelection(
+    draft_report = sentence_constraint_candidate.SentenceConstraintCandidateReport(
+        candidates=(
+            sentence_constraint_candidate.SentenceConstraintCandidate(
+                id=sentence_tasks[0].id,
                 task_id=sentence_tasks[0].id,
-                selected_context_sentence_ids=("s1",),
+                source_span=sentence_tasks[0].source_span,
+                source_strength=("obligation",),
                 original="Optionality affects API compatibility. Fields must be either optional or required.",
-            ),
-            sentence_context_selection.SentenceContextSelection(
-                task_id=sentence_tasks[1].id,
-                selected_context_sentence_ids=(),
-                original="New fields should explicitly set either `+optional` or `+required`.",
+                constraint="Fields must be either optional or required.",
             ),
         ),
-        conflicts=(),
     )
 
-    tasks = sentence_interpretation.build_interpretation_tasks(sentence_tasks, context_report)
+    tasks = sentence_interpretation.build_interpretation_tasks(draft_report)
 
     assert tasks[0].id == sentence_tasks[0].id
     assert tasks[0].source_span == sentence_tasks[0].source_span
     assert tasks[0].source_strength == ("obligation",)
     assert tasks[0].original == ("Optionality affects API compatibility. Fields must be either optional or required.")
+    assert tasks[0].constraint == "Fields must be either optional or required."
 
 
 def test_select_interpretations_with_codex_writes_one_interpretation_per_task(mocker: MockerFixture) -> None:
@@ -141,6 +139,7 @@ def test_load_and_save_interpretation_report(tmp_path: Path) -> None:
                 source_span="10-10",
                 source_strength=("obligation",),
                 original="Fields must be either optional or required.",
+                constraint="Fields must be either optional or required.",
                 interpretation="Fields must be either optional or required.",
             ),
         ),
@@ -169,11 +168,13 @@ def _interpretation_tasks() -> tuple[sentence_interpretation.SentenceInterpretat
             source_span=sentence_tasks[0].source_span,
             source_strength=("obligation",),
             original="Fields must be either optional or required.",
+            constraint="Fields must be either optional or required.",
         ),
         sentence_interpretation.SentenceInterpretationTask(
             id=sentence_tasks[1].id,
             source_span=sentence_tasks[1].source_span,
             source_strength=("recommendation",),
             original="New fields should explicitly set either `+optional` or `+required`.",
+            constraint="New fields should explicitly set either `+optional` or `+required`.",
         ),
     )

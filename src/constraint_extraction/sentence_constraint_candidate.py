@@ -15,7 +15,7 @@ import sentence_context_selection
 
 
 class SentenceConstraintCandidateTask(base.FrozenModel):
-    """One selected original that needs atomic constraint candidates."""
+    """One selected original that needs one draft constraint."""
 
     id: str
     source_span: str
@@ -24,7 +24,7 @@ class SentenceConstraintCandidateTask(base.FrozenModel):
 
 
 class SentenceConstraintCandidate(base.FrozenModel):
-    """One atomic constraint candidate generated from a selected original."""
+    """One draft constraint generated from a selected original."""
 
     id: str
     task_id: str
@@ -44,7 +44,7 @@ class ConstraintCandidateRetryAttempt(base.FrozenModel):
 
 
 class SentenceConstraintCandidateReport(base.FrozenModel):
-    """LLM atomic constraint candidate report."""
+    """LLM draft constraint report."""
 
     candidates: tuple[SentenceConstraintCandidate, ...]
     retry_attempts: tuple[ConstraintCandidateRetryAttempt, ...] = ()
@@ -58,7 +58,7 @@ class ExistingConstraintCandidateReportValidation(base.FrozenModel):
 
 
 class CodexConstraintCandidateError(RuntimeError):
-    """`codex exec` failed while generating atomic constraint candidates."""
+    """`codex exec` failed while generating draft constraints."""
 
     def __init__(self, *, command: tuple[str, ...], returncode: int, stdout: str, stderr: str) -> None:
         message = f"codex exec failed with returncode={returncode}"
@@ -74,7 +74,7 @@ class CodexConstraintCandidateError(RuntimeError):
 
 
 class SentenceConstraintCandidateRetryError(RuntimeError):
-    """Codex kept returning incomplete or invalid constraint candidates."""
+    """Codex kept returning incomplete or invalid draft constraints."""
 
     def __init__(self, *, attempts: tuple[ConstraintCandidateRetryAttempt, ...]) -> None:
         latest = attempts[-1]
@@ -155,7 +155,7 @@ def select_constraint_candidates_with_codex(
     max_retries: int = 3,
     batch_size: int = 25,
 ) -> SentenceConstraintCandidateReport:
-    """Run Codex in batches to generate atomic constraint candidates."""
+    """Run Codex in batches to generate one draft constraint for each original."""
     reports = tuple(
         _select_constraint_candidate_batch_with_codex(
             batch,
@@ -242,7 +242,7 @@ def build_constraint_candidate_prompt(
     *,
     retry_feedback: tuple[ConstraintCandidateRetryAttempt, ...] = (),
 ) -> str:
-    """Build a JSON-only atomic constraint candidate prompt."""
+    """Build a JSON-only draft constraint prompt."""
     task_payload = [
         {
             "task_id": task.id,
@@ -260,12 +260,13 @@ def build_constraint_candidate_prompt(
             f"{json.dumps(retry_payload, ensure_ascii=False, indent=2)}\n"
         )
     return (
-        "You are Codex. For each task, extract one or more candidate atomic constraints "
-        "from the original source text.\n"
-        "Each constraint must be a concise, testable rule grounded only in the original.\n"
-        "Split multiple independent rules into separate constraints. Do not add interpretations or explanations.\n"
+        "You are Codex. For each task, write exactly one draft constraint for each original.\n"
+        "The draft must be concise, testable, and grounded only in the original.\n"
+        "Do not split the original into multiple constraints. "
+        "If the original contains multiple requirements, keep them in one draft constraint.\n"
+        "A human reviewer will decide whether the draft is atomic. Do not add interpretations or explanations.\n"
         "Return JSON only with this schema:\n"
-        '{"tasks":[{"task_id":"...","constraints":[{"constraint":"..."}]}]}\n\n'
+        '{"tasks":[{"task_id":"...","constraint":"..."}]}\n\n'
         f"{retry_text}"
         f"Tasks:\n{json.dumps({'tasks': task_payload}, ensure_ascii=False, indent=2)}"
     )
@@ -281,7 +282,7 @@ def _select_constraint_candidate_batch_with_codex(
     max_retries: int,
 ) -> SentenceConstraintCandidateReport:
     tasks_by_id = {task.id: task for task in tasks}
-    constraints_by_task_id: dict[str, tuple[str, ...]] = {}
+    constraints_by_task_id: dict[str, str] = {}
     retry_attempts: list[ConstraintCandidateRetryAttempt] = []
     pending_tasks = tasks
     retry_feedback: tuple[ConstraintCandidateRetryAttempt, ...] = ()
@@ -317,27 +318,22 @@ def _select_constraint_candidate_batch_with_codex(
             raise SentenceConstraintCandidateRetryError(attempts=tuple(retry_attempts))
 
     return SentenceConstraintCandidateReport(
-        candidates=tuple(
-            candidate for task in tasks for candidate in _materialize_candidates(task, constraints_by_task_id[task.id])
-        ),
+        candidates=tuple(_materialize_candidate(task, constraints_by_task_id[task.id]) for task in tasks),
         retry_attempts=tuple(retry_attempts),
     )
 
 
-def _materialize_candidates(
+def _materialize_candidate(
     task: SentenceConstraintCandidateTask,
-    constraints: tuple[str, ...],
-) -> tuple[SentenceConstraintCandidate, ...]:
-    return tuple(
-        SentenceConstraintCandidate(
-            id=f"{task.id}_c{index}",
-            task_id=task.id,
-            source_span=task.source_span,
-            source_strength=task.source_strength,
-            original=task.original,
-            constraint=constraint,
-        )
-        for index, constraint in enumerate(constraints, start=1)
+    constraint: str,
+) -> SentenceConstraintCandidate:
+    return SentenceConstraintCandidate(
+        id=task.id,
+        task_id=task.id,
+        source_span=task.source_span,
+        source_strength=task.source_strength,
+        original=task.original,
+        constraint=constraint,
     )
 
 
@@ -353,24 +349,16 @@ def _task_batches(
 def _parse_constraint_candidate_response(
     response: str,
     tasks: tuple[SentenceConstraintCandidateTask, ...],
-) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...], tuple[str, ...]]:
+) -> tuple[dict[str, str], tuple[str, ...], tuple[str, ...]]:
     document = json.loads(_extract_json_object(response))
     raw_tasks = document["tasks"]
-    constraints_by_task_id: dict[str, tuple[str, ...]] = {}
+    constraints_by_task_id: dict[str, str] = {}
     for item in raw_tasks:
         task_id = str(item["task_id"])
-        constraints_by_task_id[task_id] = tuple(
-            str(constraint["constraint"]).strip()
-            for constraint in item["constraints"]
-            if str(constraint["constraint"]).strip()
-        )
+        constraints_by_task_id[task_id] = str(item["constraint"]).strip()
 
     expected_task_ids = {task.id for task in tasks}
-    missing_task_ids = tuple(
-        task_id
-        for task_id in expected_task_ids
-        if task_id not in constraints_by_task_id or not constraints_by_task_id[task_id]
-    )
+    missing_task_ids = tuple(task_id for task_id in expected_task_ids if not constraints_by_task_id.get(task_id))
     extra_task_ids = tuple(task_id for task_id in constraints_by_task_id if task_id not in expected_task_ids)
     constraints_by_task_id = {
         task_id: constraints for task_id, constraints in constraints_by_task_id.items() if task_id in expected_task_ids
@@ -473,20 +461,10 @@ _CODEX_OUTPUT_SCHEMA = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["task_id", "constraints"],
+                "required": ["task_id", "constraint"],
                 "properties": {
                     "task_id": {"type": "string"},
-                    "constraints": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["constraint"],
-                            "properties": {
-                                "constraint": {"type": "string"},
-                            },
-                        },
-                    },
+                    "constraint": {"type": "string"},
                 },
             },
         },

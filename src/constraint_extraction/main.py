@@ -126,8 +126,7 @@ def _run_default_constraint_pipeline() -> None:
     print("[constraint-extraction] running sentence-interpretations", flush=True)
     _run_sentence_interpretations(
         argparse.Namespace(
-            tasks_path=None,
-            context_selection_path=None,
+            constraint_candidates_path=None,
             output_path=None,
             codex_command="codex",
             model=None,
@@ -189,8 +188,7 @@ def _configure_sentence_constraint_candidates_parser(parser: argparse.ArgumentPa
 
 
 def _configure_sentence_interpretations_parser(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--tasks-path", type=Path, default=None)
-    _ = parser.add_argument("--context-selection-path", type=Path, default=None)
+    _ = parser.add_argument("--constraint-candidates-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     _ = parser.add_argument("--codex-command", type=str, default="codex")
     _ = parser.add_argument("--model", type=str, default=None)
@@ -363,18 +361,13 @@ def _run_sentence_constraint_candidates(arguments: argparse.Namespace) -> None:
 def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
     docs_dir = project_root / "docs"
-    tasks_path = arguments.tasks_path or (
-        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
-    )
-    context_selection_path = arguments.context_selection_path or (
-        docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json"
+    constraint_candidates_path = arguments.constraint_candidates_path or (
+        docs_dir / "llm" / "api-conventions" / "sentence_constraint_candidates.json"
     )
     output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json")
-    print(f"[sentence-interpretations] loading tasks from {tasks_path}", flush=True)
-    sentence_tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
-    print(f"[sentence-interpretations] loading context selections from {context_selection_path}", flush=True)
-    context_report = sentence_context_selection.load_context_selection_report(context_selection_path)
-    tasks = sentence_interpretation.build_interpretation_tasks(sentence_tasks, context_report)
+    print(f"[sentence-interpretations] loading constraint candidates from {constraint_candidates_path}", flush=True)
+    draft_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_candidates_path)
+    tasks = sentence_interpretation.build_interpretation_tasks(draft_report)
     if output_path.exists():
         existing_report = sentence_interpretation.load_interpretation_report(output_path)
         existing_validation = sentence_interpretation.validate_existing_report(existing_report, tasks)

@@ -34,7 +34,7 @@ def test_build_constraint_candidate_tasks_joins_sentence_tasks_with_selected_ori
     assert tasks[0].original == ("Optionality affects API compatibility. Fields must be either optional or required.")
 
 
-def test_select_constraint_candidates_with_codex_writes_candidates_per_task(mocker: MockerFixture) -> None:
+def test_select_constraint_candidates_with_codex_writes_one_draft_per_original(mocker: MockerFixture) -> None:
     tasks = _candidate_tasks()
     codex_run = mocker.patch(
         "sentence_constraint_candidate.run_codex_constraint_candidates",
@@ -44,10 +44,7 @@ def test_select_constraint_candidates_with_codex_writes_candidates_per_task(mock
                     "tasks": [
                         {
                             "task_id": tasks[0].id,
-                            "constraints": [
-                                {"constraint": "Fields must be either optional or required."},
-                                {"constraint": "Field optionality must be explicit."},
-                            ],
+                            "constraint": "Fields must be either optional or required.",
                         },
                     ],
                 },
@@ -57,9 +54,7 @@ def test_select_constraint_candidates_with_codex_writes_candidates_per_task(mock
                     "tasks": [
                         {
                             "task_id": tasks[1].id,
-                            "constraints": [
-                                {"constraint": "New fields should set optional or required tags."},
-                            ],
+                            "constraint": "New fields should set optional or required tags.",
                         },
                     ],
                 },
@@ -77,11 +72,11 @@ def test_select_constraint_candidates_with_codex_writes_candidates_per_task(mock
 
     assert codex_run.call_count == 2
     assert "Return JSON only" in codex_run.call_args_list[0].args[0]
+    assert "write exactly one draft constraint for each original" in codex_run.call_args_list[0].args[0]
     assert codex_run.call_args_list[0].kwargs["model"] == "gpt-5.2"
     assert tuple(candidate.id for candidate in report.candidates) == (
-        f"{tasks[0].id}_c1",
-        f"{tasks[0].id}_c2",
-        f"{tasks[1].id}_c1",
+        tasks[0].id,
+        tasks[1].id,
     )
     assert report.candidates[0].constraint == "Fields must be either optional or required."
     assert report.retry_attempts == ()
@@ -97,7 +92,7 @@ def test_select_constraint_candidates_with_codex_retries_missing_task_candidates
                     "tasks": [
                         {
                             "task_id": tasks[0].id,
-                            "constraints": [{"constraint": "A"}],
+                            "constraint": "A",
                         },
                     ],
                 },
@@ -107,7 +102,7 @@ def test_select_constraint_candidates_with_codex_retries_missing_task_candidates
                     "tasks": [
                         {
                             "task_id": tasks[1].id,
-                            "constraints": [{"constraint": "B"}],
+                            "constraint": "B",
                         },
                     ],
                 },
@@ -152,7 +147,7 @@ def test_load_and_save_constraint_candidate_report(tmp_path: Path) -> None:
     report = sentence_constraint_candidate.SentenceConstraintCandidateReport(
         candidates=(
             sentence_constraint_candidate.SentenceConstraintCandidate(
-                id="block_0001_s1_c1",
+                id="block_0001_s1",
                 task_id="block_0001_s1",
                 source_span="10-10",
                 source_strength=("obligation",),

@@ -60,8 +60,7 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_constraint_candidates.call_args.args[0].batch_size == 25
     assert sentence_constraint_candidates.call_args.args[0].stream_codex_output is False
     sentence_interpretations.assert_called_once()
-    assert sentence_interpretations.call_args.args[0].tasks_path is None
-    assert sentence_interpretations.call_args.args[0].context_selection_path is None
+    assert sentence_interpretations.call_args.args[0].constraint_candidates_path is None
     assert sentence_interpretations.call_args.args[0].output_path is None
     assert sentence_interpretations.call_args.args[0].codex_command == "codex"
     assert sentence_interpretations.call_args.args[0].model is None
@@ -203,7 +202,7 @@ Optionality affects API compatibility. Fields must be either optional or require
         return_value=main.sentence_constraint_candidate.SentenceConstraintCandidateReport(
             candidates=(
                 main.sentence_constraint_candidate.SentenceConstraintCandidate(
-                    id=f"{tasks[0].id}_c1",
+                    id=tasks[0].id,
                     task_id=tasks[0].id,
                     source_span=tasks[0].source_span,
                     source_strength=("obligation",),
@@ -254,8 +253,7 @@ def test_run_sentence_interpretations_writes_llm_interpretations(
     mocker: MockerFixture,
     capsys: CaptureFixture[str],
 ) -> None:
-    tasks_path = tmp_path / "tasks.json"
-    context_selection_path = tmp_path / "context-selection.json"
+    constraint_candidates_path = tmp_path / "constraint-candidates.json"
     output_path = tmp_path / "interpretations.json"
     document = """
 ## Section
@@ -263,21 +261,19 @@ def test_run_sentence_interpretations_writes_llm_interpretations(
 Optionality affects API compatibility. Fields must be either optional or required.
 """.strip()
     tasks = main.normative_audit.extract_sentence_selection_tasks(document)
-    tasks_path.write_text(
-        json.dumps({"tasks": [task.model_dump(mode="json") for task in tasks]}),
-        encoding="utf-8",
-    )
-    context_report = main.sentence_context_selection.SentenceContextSelectionReport(
-        selections=(
-            main.sentence_context_selection.SentenceContextSelection(
+    draft_report = main.sentence_constraint_candidate.SentenceConstraintCandidateReport(
+        candidates=(
+            main.sentence_constraint_candidate.SentenceConstraintCandidate(
+                id=tasks[0].id,
                 task_id=tasks[0].id,
-                selected_context_sentence_ids=("s1",),
+                source_span=tasks[0].source_span,
+                source_strength=("obligation",),
                 original="Optionality affects API compatibility. Fields must be either optional or required.",
+                constraint="Fields must be either optional or required.",
             ),
         ),
-        conflicts=(),
     )
-    main.sentence_context_selection.save_context_selection_report(context_report, context_selection_path)
+    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_candidates_path)
     select_interpretations = mocker.patch(
         "main.sentence_interpretation.select_interpretations_with_codex",
         return_value=main.sentence_interpretation.SentenceInterpretationReport(
@@ -287,6 +283,7 @@ Optionality affects API compatibility. Fields must be either optional or require
                     source_span=tasks[0].source_span,
                     source_strength=("obligation",),
                     original="Optionality affects API compatibility. Fields must be either optional or required.",
+                    constraint="Fields must be either optional or required.",
                     interpretation="Fields must be either optional or required.",
                 ),
             ),
@@ -295,8 +292,7 @@ Optionality affects API compatibility. Fields must be either optional or require
 
     main._run_sentence_interpretations(
         argparse.Namespace(
-            tasks_path=tasks_path,
-            context_selection_path=context_selection_path,
+            constraint_candidates_path=constraint_candidates_path,
             output_path=output_path,
             codex_command="codex",
             model="gpt-5.2",
@@ -317,8 +313,7 @@ Optionality affects API compatibility. Fields must be either optional or require
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["interpretations"][0]["interpretation"] == ("Fields must be either optional or required.")
     output = capsys.readouterr().out
-    assert "[sentence-interpretations] loading tasks from" in output
-    assert "[sentence-interpretations] loading context selections from" in output
+    assert "[sentence-interpretations] loading constraint candidates from" in output
     assert (
         "[sentence-interpretations] running codex for 1 tasks "
         "(model=gpt-5.2, timeout=120s, max_retries=2, batch_size=10, stream_codex_output=True)" in output
