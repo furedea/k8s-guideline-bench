@@ -140,6 +140,23 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json")
     print(f"[sentence-context-selection] loading tasks from {tasks_path}", flush=True)
     tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
+    if output_path.exists():
+        existing_report = sentence_context_selection.load_context_selection_report(output_path)
+        existing_validation = sentence_context_selection.validate_existing_report(existing_report, tasks)
+        if existing_validation.is_reusable:
+            print(f"[sentence-context-selection] skip existing report: {output_path}")
+            print(f"[sentence-context-selection] selections={len(existing_report.selections)}")
+            print(f"[sentence-context-selection] conflicts={len(existing_report.conflicts)}")
+            print(
+                "[sentence-context-selection] "
+                f"invalid_context_selections={len(existing_report.invalid_context_selections)}",
+            )
+            print(f"[sentence-context-selection] retry_attempts={len(existing_report.retry_attempts)}")
+            return
+        print(
+            f"[sentence-context-selection] existing report is not reusable: {existing_validation.reason}",
+            flush=True,
+        )
     print(
         f"[sentence-context-selection] running codex for {len(tasks)} tasks "
         f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "

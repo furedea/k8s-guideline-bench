@@ -47,6 +47,13 @@ class SentenceContextSelectionReport(base.FrozenModel):
     retry_attempts: tuple[SelectionRetryAttempt, ...] = ()
 
 
+class ExistingReportValidation(base.FrozenModel):
+    """Whether an existing sentence context selection report can be reused."""
+
+    is_reusable: bool
+    reason: str
+
+
 class CodexContextSelectionError(RuntimeError):
     """`codex exec` failed while selecting source sentence contexts."""
 
@@ -84,6 +91,49 @@ def load_sentence_selection_tasks(path: Path) -> tuple[normative_audit.SentenceS
     if not isinstance(tasks, list):
         raise TypeError("Sentence selection task file must contain a tasks array.")
     return tuple(_sentence_selection_task_from_json(task) for task in tasks)
+
+
+def load_context_selection_report(path: Path) -> SentenceContextSelectionReport:
+    """Load a sentence context selection report."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise TypeError("Sentence context selection report must contain a JSON object.")
+    report_document = cast(dict[str, object], document)
+    return SentenceContextSelectionReport(
+        selections=tuple(
+            _context_selection_from_json(selection) for selection in _list_field(report_document, "selections")
+        ),
+        conflicts=tuple(
+            _context_conflict_from_json(conflict) for conflict in _list_field(report_document, "conflicts")
+        ),
+        invalid_context_selections=tuple(
+            _invalid_context_selection_from_json(selection)
+            for selection in _list_field(report_document, "invalid_context_selections")
+        ),
+        retry_attempts=tuple(
+            _selection_retry_attempt_from_json(attempt) for attempt in _list_field(report_document, "retry_attempts")
+        ),
+    )
+
+
+def validate_existing_report(
+    report: SentenceContextSelectionReport,
+    tasks: tuple[normative_audit.SentenceSelectionTask, ...],
+) -> ExistingReportValidation:
+    """Check whether an existing report fully covers the current task set."""
+    expected_task_ids = {task.id for task in tasks}
+    selection_task_ids = {selection.task_id for selection in report.selections}
+    if report.conflicts:
+        return ExistingReportValidation(is_reusable=False, reason="conflicts_present")
+    if report.invalid_context_selections:
+        return ExistingReportValidation(is_reusable=False, reason="invalid_context_selections_present")
+    missing_task_ids = expected_task_ids - selection_task_ids
+    if missing_task_ids:
+        return ExistingReportValidation(is_reusable=False, reason="missing_task_selections")
+    extra_task_ids = selection_task_ids - expected_task_ids
+    if extra_task_ids:
+        return ExistingReportValidation(is_reusable=False, reason="unknown_task_selections")
+    return ExistingReportValidation(is_reusable=True, reason="complete")
 
 
 def select_sentence_contexts_with_codex(
@@ -377,6 +427,57 @@ def _sentence_selection_task_from_json(document: object) -> normative_audit.Sent
         main_sentence=_source_sentence_from_json(task_document["main_sentence"]),
         shared_context_sentences=tuple(_source_sentence_from_json(sentence) for sentence in shared_context_sentences),
         context_sentences=tuple(_source_sentence_from_json(sentence) for sentence in context_sentences),
+    )
+
+
+def _context_selection_from_json(document: object) -> SentenceContextSelection:
+    if not isinstance(document, dict):
+        raise TypeError("Sentence context selection document must be an object.")
+    selection_document = cast(dict[str, object], document)
+    return SentenceContextSelection(
+        task_id=str(selection_document["task_id"]),
+        selected_context_sentence_ids=tuple(
+            str(item) for item in _list_field(selection_document, "selected_context_sentence_ids")
+        ),
+        original=str(selection_document["original"]),
+    )
+
+
+def _context_conflict_from_json(document: object) -> normative_audit.ContextSelectionConflict:
+    if not isinstance(document, dict):
+        raise TypeError("Context selection conflict document must be an object.")
+    conflict_document = cast(dict[str, object], document)
+    return normative_audit.ContextSelectionConflict(
+        block_id=str(conflict_document["block_id"]),
+        sentence_id=str(conflict_document["sentence_id"]),
+        sentence_text=str(conflict_document["sentence_text"]),
+        task_ids=tuple(str(item) for item in _list_field(conflict_document, "task_ids")),
+    )
+
+
+def _invalid_context_selection_from_json(document: object) -> InvalidContextSelection:
+    if not isinstance(document, dict):
+        raise TypeError("Invalid context selection document must be an object.")
+    selection_document = cast(dict[str, object], document)
+    return InvalidContextSelection(
+        task_id=str(selection_document["task_id"]),
+        sentence_id=str(selection_document["sentence_id"]),
+        reason=str(selection_document["reason"]),
+    )
+
+
+def _selection_retry_attempt_from_json(document: object) -> SelectionRetryAttempt:
+    if not isinstance(document, dict):
+        raise TypeError("Selection retry attempt document must be an object.")
+    attempt_document = cast(dict[str, object], document)
+    attempt_value = attempt_document["attempt"]
+    if not isinstance(attempt_value, int):
+        raise TypeError("Selection retry attempt `attempt` must be an integer.")
+    return SelectionRetryAttempt(
+        attempt=attempt_value,
+        task_ids=tuple(str(item) for item in _list_field(attempt_document, "task_ids")),
+        reason=str(attempt_document["reason"]),
+        details=tuple(str(item) for item in _list_field(attempt_document, "details")),
     )
 
 

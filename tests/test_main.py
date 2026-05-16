@@ -96,3 +96,51 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert "[sentence-context-selection] conflicts=0" in output
     assert "[sentence-context-selection] invalid_context_selections=0" in output
     assert "[sentence-context-selection] retry_attempts=0" in output
+
+
+def test_run_sentence_context_selection_skips_reusable_existing_report(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    capsys: CaptureFixture[str],
+) -> None:
+    tasks_path = tmp_path / "tasks.json"
+    output_path = tmp_path / "selection.json"
+    document = """
+## Section
+
+Optionality affects API compatibility. Fields must be either optional or required.
+""".strip()
+    tasks = main.normative_audit.extract_sentence_selection_tasks(document)
+    tasks_path.write_text(
+        json.dumps({"tasks": [task.model_dump(mode="json") for task in tasks]}),
+        encoding="utf-8",
+    )
+    existing_report = main.sentence_context_selection.SentenceContextSelectionReport(
+        selections=(
+            main.sentence_context_selection.SentenceContextSelection(
+                task_id=tasks[0].id,
+                selected_context_sentence_ids=("s1",),
+                original="Optionality affects API compatibility. Fields must be either optional or required.",
+            ),
+        ),
+        conflicts=(),
+    )
+    main.sentence_context_selection.save_context_selection_report(existing_report, output_path)
+    select_contexts = mocker.patch("main.sentence_context_selection.select_sentence_contexts_with_codex")
+
+    main._run_sentence_context_selection(
+        argparse.Namespace(
+            tasks_path=tasks_path,
+            output_path=output_path,
+            codex_command="codex",
+            model=None,
+            timeout_seconds=120,
+            max_retries=2,
+            stream_codex_output=False,
+        ),
+    )
+
+    select_contexts.assert_not_called()
+    output = capsys.readouterr().out
+    assert "[sentence-context-selection] skip existing report:" in output
+    assert "[sentence-context-selection] selections=1" in output

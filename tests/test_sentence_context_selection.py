@@ -257,6 +257,73 @@ def test_load_and_save_sentence_context_selection_report(tmp_path: Path) -> None
     assert saved["selections"][0]["selected_context_sentence_ids"] == ["s1"]
 
 
+def test_validate_existing_report_accepts_complete_report_with_retry_history() -> None:
+    tasks = _tasks()
+    report = sentence_context_selection.SentenceContextSelectionReport(
+        selections=tuple(
+            sentence_context_selection.SentenceContextSelection(
+                task_id=task.id,
+                selected_context_sentence_ids=(),
+                original=task.main_sentence.text,
+            )
+            for task in tasks
+        ),
+        conflicts=(),
+        retry_attempts=(
+            sentence_context_selection.SelectionRetryAttempt(
+                attempt=1,
+                task_ids=(tasks[0].id,),
+                reason="unknown_context_sentence_id",
+            ),
+        ),
+    )
+
+    validation = sentence_context_selection.validate_existing_report(report, tasks)
+
+    assert validation.is_reusable is True
+    assert validation.reason == "complete"
+
+
+def test_validate_existing_report_rejects_incomplete_or_invalid_report() -> None:
+    tasks = _tasks()
+    missing_selection_report = sentence_context_selection.SentenceContextSelectionReport(
+        selections=(
+            sentence_context_selection.SentenceContextSelection(
+                task_id=tasks[0].id,
+                selected_context_sentence_ids=(),
+                original=tasks[0].main_sentence.text,
+            ),
+        ),
+        conflicts=(),
+    )
+    invalid_report = sentence_context_selection.SentenceContextSelectionReport(
+        selections=tuple(
+            sentence_context_selection.SentenceContextSelection(
+                task_id=task.id,
+                selected_context_sentence_ids=(),
+                original=task.main_sentence.text,
+            )
+            for task in tasks
+        ),
+        conflicts=(),
+        invalid_context_selections=(
+            sentence_context_selection.InvalidContextSelection(
+                task_id=tasks[0].id,
+                sentence_id="s99",
+                reason="unknown_context_sentence_id",
+            ),
+        ),
+    )
+
+    missing_validation = sentence_context_selection.validate_existing_report(missing_selection_report, tasks)
+    invalid_validation = sentence_context_selection.validate_existing_report(invalid_report, tasks)
+
+    assert missing_validation.is_reusable is False
+    assert missing_validation.reason == "missing_task_selections"
+    assert invalid_validation.is_reusable is False
+    assert invalid_validation.reason == "invalid_context_selections_present"
+
+
 def _tasks() -> tuple[normative_audit.SentenceSelectionTask, ...]:
     document = """
 ## Section
