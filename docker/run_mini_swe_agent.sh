@@ -28,8 +28,9 @@ function main() {
   readonly STEP_LIMIT="${MINI_SWE_AGENT_STEP_LIMIT:-20}"
   readonly COST_LIMIT="${MINI_SWE_AGENT_COST_LIMIT:-}"
   readonly TRAJECTORY_PATH="${MINI_SWE_AGENT_TRAJECTORY_PATH:-${OUTPUT_DIR}/trajectory.json}"
+  readonly MINI_PYTHON="${MINI_SWE_AGENT_PYTHON:-/opt/mini-swe-agent/bin/python}"
   readonly MINI_CONFIG_SOURCE_PATH="${MINI_SWE_AGENT_CONFIG_PATH:-$(
-    python3 - <<'PY'
+    "${MINI_PYTHON}" - <<'PY'
 from minisweagent.config import builtin_config_dir
 
 print(builtin_config_dir / "mini.yaml")
@@ -42,7 +43,7 @@ PY
   mkdir -p "${OUTPUT_DIR}" "$(dirname "${TRAJECTORY_PATH}")"
   exec > >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stdout.log")
   exec 2> >(tee -a "${OUTPUT_DIR}/mini_swe_agent_stderr.log" >&2)
-  python3 - "${MINI_CONFIG_SOURCE_PATH}" "${MINI_RUNTIME_CONFIG_PATH}" "${STEP_LIMIT}" <<'PY'
+  "${MINI_PYTHON}" - "${MINI_CONFIG_SOURCE_PATH}" "${MINI_RUNTIME_CONFIG_PATH}" "${STEP_LIMIT}" <<'PY'
 import sys
 from pathlib import Path
 
@@ -60,6 +61,7 @@ PY
     echo "model=${MODEL_NAME}"
     echo "worktree=${WORKTREE}"
     echo "prompt_path=${PROMPT_PATH}"
+    echo "python=${MINI_PYTHON}"
     echo "config_source=${MINI_CONFIG_SOURCE_PATH}"
     echo "runtime_config=${MINI_RUNTIME_CONFIG_PATH}"
     echo "step_limit=${STEP_LIMIT}"
