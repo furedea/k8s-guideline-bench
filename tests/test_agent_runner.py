@@ -569,6 +569,166 @@ def test_run_docker_agentic_instance_records_mini_swe_agent_budget_exit_for_empt
     assert '"failure_reason": "agent_budget_exceeded"' in metadata
 
 
+def test_run_docker_agentic_instance_rejects_mini_swe_agent_budget_exit_even_with_patch(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    output_dir = results_root / "docker-run" / "42"
+
+    def fake_run(  # noqa: PLR0911
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+        _ = capture_output, text, check, timeout
+        if command[:3] == ["docker", "run", "--rm"]:
+            _ = (output_dir / "trajectory.json").write_text(
+                json.dumps({"info": {"exit_status": "LimitsExceeded"}, "messages": []}),
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:3] == ["git", "-C", str(results_root / "docker-run" / "42" / "worktree")]:
+            return subprocess.CompletedProcess(command, 0, stdout=b"diff --git\n", stderr=b"")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent-mini-swe-agent",
+            agent_command="run-mini-swe-agent",
+            backend=agent_runner.AgentBackend.MINI_SWE_AGENT,
+        ),
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    assert result.status == agent_runner.AgentRunStatus.FAILED
+    assert result.predicted_patch == ""
+    metadata = json.loads((output_dir / "run_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["failure_reason"] == "agent_budget_exceeded"
+    assert metadata["predicted_patch_bytes"] > 0
+
+
+def test_run_docker_agentic_instance_rejects_external_network_access_even_with_patch(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    instance_root = tmp_path / "datasets" / "abc123"
+    instance_root.mkdir(parents=True)
+    instance = _make_instance(instance_root)
+    results_root = tmp_path / "results"
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    output_dir = results_root / "docker-run" / "42"
+
+    def fake_run(  # noqa: PLR0911
+        command: list[str],
+        *,
+        capture_output: bool,
+        check: bool,
+        text: bool = False,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
+        _ = capture_output, text, check, timeout
+        if command[:3] == ["docker", "run", "--rm"]:
+            _ = (output_dir / "trajectory.json").write_text(
+                json.dumps(
+                    {
+                        "info": {"exit_status": "Submitted"},
+                        "messages": [
+                            {
+                                "role": "assistant",
+                                "extra": {
+                                    "actions": [
+                                        {
+                                            "command": (
+                                                "curl -s "
+                                                "https://patch-diff.githubusercontent.com/raw/"
+                                                "kubernetes/kubernetes/pull/42.diff"
+                                            ),
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ),
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:4] == ["git", "-C", str(repo_path), "archive"]:
+            Path(command[-1]).write_text("archive", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["tar", "-xf"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["cp", "-cR"]:
+            Path(command[-1]).mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:2] == ["git", "-C"] and command[3] in {"init", "config", "add", "commit"}:
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        if command[:3] == ["git", "-C", str(results_root / "docker-run" / "42" / "worktree")]:
+            return subprocess.CompletedProcess(command, 0, stdout=b"diff --git\n", stderr=b"")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    _ = mocker.patch("agent_runner.subprocess.run", autospec=True, side_effect=fake_run)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent-mini-swe-agent",
+            agent_command="run-mini-swe-agent",
+            backend=agent_runner.AgentBackend.MINI_SWE_AGENT,
+        ),
+    )
+
+    result = agent_runner.run_agent_on_instance(
+        instance=instance,
+        constraints=_constraints(),
+        config=config,
+        results_root=results_root,
+        repo_path=repo_path,
+    )
+
+    assert result.status == agent_runner.AgentRunStatus.FAILED
+    metadata = json.loads((output_dir / "run_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["status"] == "failed"
+    assert metadata["failure_reason"] == "external_network_access"
+
+
 def test_classify_agent_failure_does_not_treat_step_limit_config_errors_as_budget_exceeded() -> None:
     completed = subprocess.CompletedProcess(
         args=["docker", "run"],

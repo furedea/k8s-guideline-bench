@@ -4,3 +4,5 @@
 
 *
 !docker/
+!src/
+!src/local_llm_proxy.py

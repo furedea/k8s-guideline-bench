@@ -17,6 +17,8 @@ import pr_collection
 import pytest
 from pytest_mock import MockerFixture
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _materialize_instance(datasets_root: Path, pr_number: int) -> dataset_builder.DatasetInstance:
     detail = pr_collection.PullRequestDetail(
@@ -926,3 +928,14 @@ def test_load_experiment_spec_preserves_explicit_gold_scope_judge_config(tmp_pat
     assert gold_cfg.system_prompt == "gold judge"
     assert gold_cfg.judge_mode == judge.JudgeMode.PATCH_ONLY
     assert loaded.judge_config.model == "sonnet"
+
+
+def test_local_100_spec_routes_agent_to_isolated_proxy_and_judge_to_host_proxy() -> None:
+    spec = experiment.load_experiment_spec(REPO_ROOT / "config" / "experiment_spec_local_100.json")
+
+    agent_docker = spec.agent_configs[0].docker
+    assert "--network=k8s-bench-local" in agent_docker.docker_args
+    assert "--network=host" not in agent_docker.docker_args
+    assert agent_docker.openai_compatible_provider is not None
+    assert agent_docker.openai_compatible_provider.client.base_url == "http://k8s-bench-proxy:8002/v1"
+    assert spec.judge_config.client.base_url == "http://localhost:8002/v1"
