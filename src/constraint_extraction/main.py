@@ -12,10 +12,13 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-for _stage in ("constraint_extraction", "common", ""):
+for _stage in ("constraint_extraction", "agent_execution", "common", ""):
     sys.path.insert(0, str(ROOT / "src" / _stage))
 
+import client_spec  # noqa: E402
+import completion_client_factory  # noqa: E402
 import normative_audit  # noqa: E402
+import sentence_context_selection  # noqa: E402
 
 REVIEW_SHEET_FIELDNAMES = [
     "id",
@@ -50,6 +53,12 @@ def main() -> None:
             help="Generate sentence selection task JSON for one-shot LLM normalization.",
         ),
     )
+    _configure_sentence_context_selection_parser(
+        subparsers.add_parser(
+            "sentence-context-selection",
+            help="Select source context sentences for generated sentence selection tasks.",
+        ),
+    )
     arguments = parser.parse_args()
     arguments.func(arguments)
 
@@ -67,6 +76,20 @@ def _configure_sentence_selection_tasks_parser(parser: argparse.ArgumentParser) 
     _ = parser.add_argument("--output-path", type=Path, default=None)
     _ = parser.add_argument("--audit-output-path", type=Path, default=None)
     parser.set_defaults(func=_run_sentence_selection_tasks)
+
+
+def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--tasks-path", type=Path, default=None)
+    _ = parser.add_argument("--output-path", type=Path, default=None)
+    _ = parser.add_argument(
+        "--client-type", choices=[item.value for item in client_spec.ClientType], default="claude_cli"
+    )
+    _ = parser.add_argument("--api-key-env", type=str, default=None)
+    _ = parser.add_argument("--base-url", type=str, default=None)
+    _ = parser.add_argument("--command", type=str, default="claude")
+    _ = parser.add_argument("--model", type=str, required=True)
+    _ = parser.add_argument("--max-tokens", type=int, default=8192)
+    parser.set_defaults(func=_run_sentence_context_selection)
 
 
 def _run_review_sheet(arguments: argparse.Namespace) -> None:
@@ -111,6 +134,34 @@ def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
 
     print(f"Written {len(artifacts.tasks)} tasks to {output_path}")
     print(f"Written {len(artifacts.audit_records)} audit records to {audit_output_path}")
+
+
+def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    docs_dir = project_root / "docs"
+    tasks_path = arguments.tasks_path or (
+        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
+    )
+    output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json")
+    spec = client_spec.ClientSpec(
+        client_type=arguments.client_type,
+        api_key_env=arguments.api_key_env,
+        base_url=arguments.base_url,
+        command=arguments.command,
+    )
+    client = completion_client_factory.build_completion_client(spec)
+    tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
+    report = sentence_context_selection.select_sentence_contexts(
+        tasks,
+        client=client,
+        model=arguments.model,
+        max_tokens=arguments.max_tokens,
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    sentence_context_selection.save_context_selection_report(report, output_path)
+    print(f"Written {len(report.selections)} selections to {output_path}")
+    print(f"Detected {len(report.conflicts)} context selection conflicts")
 
 
 def _load_norms(path: Path) -> list[dict[str, Any]]:

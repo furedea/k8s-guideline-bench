@@ -316,3 +316,33 @@ beyond_syntax = true:
 11. 人間が review sheet で確認する
 
 この設計では，LLM は文脈選択と constraint text の整理に使います．一方で，`original` の本文そのものは必ず source document から機械的に作ります．
+
+## 実行手順
+
+まず，Markdown から `main_sentence` と候補文を機械的に作ります．既存の結果を残したい場合は，先に `sentence_selection_tasks.json` と `sentence_selection_audit.json` を `.old` などへ移動します．
+
+```bash
+uv run python src/constraint_extraction/main.py sentence-selection-tasks
+```
+
+次に，LLM に context sentence ID だけを選ばせます．この段階では LLM に原文を書かせません．出力先の `sentence_context_selection.json` には，選ばれた ID と，その ID から機械的に復元した `original` と，重複選択の conflict が保存されます．
+
+Claude CLI を使う例：
+
+```bash
+uv run python src/constraint_extraction/main.py sentence-context-selection \
+  --model claude-sonnet-4-6
+```
+
+OpenAI-compatible endpoint を使う例：
+
+```bash
+uv run python src/constraint_extraction/main.py sentence-context-selection \
+  --client-type openai_compatible \
+  --api-key-env LOCAL_LLM_API_KEY \
+  --base-url http://localhost:8001/v1 \
+  --model mistralai/Devstral-Small-2507 \
+  --max-tokens 8192
+```
+
+conflict が 0 でない場合は，同じ通常 context sentence が複数の `main_sentence` に選ばれています．その場合は，対象 task だけを再判定する必要があります．`shared_context_sentences` は共有してよい文なので，重複しても conflict にはしません．
