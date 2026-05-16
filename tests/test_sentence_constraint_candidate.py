@@ -72,7 +72,11 @@ def test_select_constraint_candidates_with_codex_writes_one_draft_per_original(m
 
     assert codex_run.call_count == 2
     assert "Return JSON only" in codex_run.call_args_list[0].args[0]
-    assert "write exactly one draft constraint for each original" in codex_run.call_args_list[0].args[0]
+    assert (
+        "rewrite the original source text into exactly one reviewable draft constraint"
+        in (codex_run.call_args_list[0].args[0])
+    )
+    assert "Preserve the normative meaning" in codex_run.call_args_list[0].args[0]
     assert codex_run.call_args_list[0].kwargs["model"] == "gpt-5.2"
     assert tuple(candidate.id for candidate in report.candidates) == (
         tasks[0].id,

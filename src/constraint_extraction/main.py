@@ -15,9 +15,9 @@ Subcommands:
 import argparse
 import csv
 import json
+import os
 import sys
 from pathlib import Path
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 for _stage in ("constraint_extraction", "common", ""):
@@ -29,19 +29,19 @@ import sentence_context_selection  # noqa: E402
 import sentence_interpretation  # noqa: E402
 
 REVIEW_SHEET_FIELDNAMES = [
-    "id",
-    "source_span",
-    "source_strength",
-    "original",
-    "text",
-    "interpretation",
-    "atomic",
-    "beyond_syntax",
-    "diff_code_related",
-    "objective",
-    "grounded",
-    "decision",
-    "notes",
+    "ID",
+    "Source-Span",
+    "Source_Strength",
+    "Original",
+    "Constraint",
+    "Interpretation",
+    "Atomic",
+    "Beyond-Syntax",
+    "Diff-Closed",
+    "Objective",
+    "Grounded",
+    "Decision(Auto)",
+    "Notes",
 ]
 
 
@@ -139,8 +139,7 @@ def _run_default_constraint_pipeline() -> None:
     print("[constraint-extraction] running review-sheet", flush=True)
     _run_review_sheet(
         argparse.Namespace(
-            norms_path=None,
-            conventions_path=None,
+            constraint_candidates_path=None,
             interpretations_path=None,
             output_path=None,
         ),
@@ -148,8 +147,7 @@ def _run_default_constraint_pipeline() -> None:
 
 
 def _configure_review_sheet_parser(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--norms-path", type=Path, default=None)
-    _ = parser.add_argument("--conventions-path", type=Path, default=None)
+    _ = parser.add_argument("--constraint-candidates-path", type=Path, default=None)
     _ = parser.add_argument("--interpretations-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     parser.set_defaults(func=_run_review_sheet)
@@ -202,24 +200,31 @@ def _configure_sentence_interpretations_parser(parser: argparse.ArgumentParser) 
 def _run_review_sheet(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
     docs_dir = project_root / "docs"
-    norms_path = arguments.norms_path or (docs_dir / "llm" / "api-conventions" / "normative_constraints.json")
-    conventions_path = arguments.conventions_path or (docs_dir / "source" / "api-conventions.md")
+    constraint_candidates_path = arguments.constraint_candidates_path or (
+        docs_dir / "llm" / "api-conventions" / "sentence_constraint_candidates.json"
+    )
     interpretations_path = arguments.interpretations_path or (
-        docs_dir / "llm" / "api-conventions" / "normative_interpretations.json"
+        docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json"
     )
-    output_path = arguments.output_path or (
-        docs_dir / "human" / "api-conventions" / "atomic_constraint_review_sheet.csv"
-    )
+    output_path = arguments.output_path or (docs_dir / "human" / "api-conventions" / "shigyos_atomic_constraints.csv")
 
-    norms = _load_norms(norms_path)
-    lines = _load_lines(conventions_path)
-    interpretations = _load_interpretations(interpretations_path)
-    rows = [_build_row(norm, lines, interpretations) for norm in norms]
+    print(f"[review-sheet] loading constraint candidates from {constraint_candidates_path}", flush=True)
+    candidate_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_candidates_path)
+    print(f"[review-sheet] loading interpretations from {interpretations_path}", flush=True)
+    interpretation_report = sentence_interpretation.load_interpretation_report(interpretations_path)
+    interpretations = {
+        interpretation.task_id: interpretation.interpretation
+        for interpretation in interpretation_report.interpretations
+    }
+    rows = [
+        _build_review_row(candidate, interpretation=interpretations.get(candidate.task_id, ""))
+        for candidate in candidate_report.candidates
+    ]
     _write_csv(rows, output_path)
 
-    filled = sum(1 for row in rows if row["interpretation"])
-    print(f"Written {len(rows)} rows to {output_path}")
-    print(f"Interpretations: {filled}/{len(rows)}")
+    filled = sum(1 for row in rows if row["Interpretation"])
+    print(f"[review-sheet] written rows={len(rows)} to {output_path}")
+    print(f"[review-sheet] interpretations={filled}/{len(rows)}")
 
 
 def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
@@ -404,50 +409,64 @@ def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
     print(f"[sentence-interpretations] retry_attempts={len(report.retry_attempts)}")
 
 
-def _load_norms(path: Path) -> list[dict[str, Any]]:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    return raw["constraints"]
+def _resolve_repo_path(
+    project_root: Path,
+    cli_repo_path: Path | None,
+    config_repo_path: Path | None,
+) -> Path:
+    """Resolve the external Kubernetes repository path."""
+    if cli_repo_path is not None:
+        return cli_repo_path if cli_repo_path.is_absolute() else project_root / cli_repo_path
+    env_repo_path = os.getenv(REPO_PATH_ENV_VAR)
+    if env_repo_path:
+        env_path = Path(env_repo_path)
+        return env_path if env_path.is_absolute() else project_root / env_path
+    if config_repo_path is not None:
+        return config_repo_path if config_repo_path.is_absolute() else project_root / config_repo_path
+    raise ValueError(
+        f"Kubernetes repository path is required. Pass --repo-path, set {REPO_PATH_ENV_VAR},"
+        " or define repo_path in the config.",
+    )
 
 
-def _load_lines(path: Path) -> list[str]:
-    return path.read_text(encoding="utf-8").splitlines(keepends=True)
+def _resolve_output_path(project_root: Path, configured_path: Path) -> Path:
+    """Resolve an output path relative to the project root when needed."""
+    if configured_path.is_absolute():
+        return configured_path
+    return project_root / configured_path
 
 
-def _load_interpretations(path: Path) -> dict[str, str]:
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return {}
-    return json.loads(raw)
+def _resolve_source_paths(
+    repo_path: Path,
+    sources: tuple[source_selection.GuidelineSource, ...],
+) -> tuple[source_selection.GuidelineSource, ...]:
+    """Resolve source document paths relative to the Kubernetes repo root."""
+    resolved_sources: list[source_selection.GuidelineSource] = []
+    for source in sources:
+        resolved_path = source.path if source.path.is_absolute() else repo_path / source.path
+        resolved_sources.append(source.model_copy(update={"path": resolved_path}))
+    return tuple(resolved_sources)
 
 
-def _extract_original(lines: list[str], span: str) -> str:
-    """Extract original text from api-conventions.md by line span."""
-    start_s, end_s = span.split("-")
-    start, end = int(start_s), int(end_s)
-    return " ".join(line.strip() for line in lines[start - 1 : end] if line.strip())
-
-
-def _build_row(
-    norm: dict[str, Any],
-    lines: list[str],
-    interpretations: dict[str, str],
+def _build_review_row(
+    candidate: sentence_constraint_candidate.SentenceConstraintCandidate,
+    *,
+    interpretation: str,
 ) -> dict[str, str]:
-    norm_id = norm["id"]
     return {
-        "id": norm_id,
-        "source_span": norm["source_span"],
-        "source_strength": norm["strength_signal"],
-        "original": _extract_original(lines, norm["source_span"]),
-        "text": norm["text"],
-        "interpretation": interpretations.get(norm_id, ""),
-        "atomic": "",
-        "beyond_syntax": "",
-        "diff_code_related": "",
-        "objective": "",
-        "grounded": "",
-        "decision": "",
-        "notes": "",
+        "ID": candidate.id,
+        "Source-Span": candidate.source_span,
+        "Source_Strength": ";".join(candidate.source_strength),
+        "Original": candidate.original,
+        "Constraint": candidate.constraint,
+        "Interpretation": interpretation,
+        "Atomic": "",
+        "Beyond-Syntax": "",
+        "Diff-Closed": "",
+        "Objective": "",
+        "Grounded": "",
+        "Decision(Auto)": "",
+        "Notes": "",
     }
 
 

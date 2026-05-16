@@ -260,9 +260,10 @@ def build_constraint_candidate_prompt(
             f"{json.dumps(retry_payload, ensure_ascii=False, indent=2)}\n"
         )
     return (
-        "You are Codex. For each task, write exactly one draft constraint for each original.\n"
-        "The draft must be concise, testable, and grounded only in the original.\n"
-        "Do not split the original into multiple constraints. "
+        "You are Codex. For each task, rewrite the original source text into exactly one reviewable draft "
+        "constraint.\n"
+        "Preserve the normative meaning of the original and stay grounded only in the original.\n"
+        "Do not split the original into multiple rows. "
         "If the original contains multiple requirements, keep them in one draft constraint.\n"
         "A human reviewer will decide whether the draft is atomic. Do not add interpretations or explanations.\n"
         "Return JSON only with this schema:\n"
