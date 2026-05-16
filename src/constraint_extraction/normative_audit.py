@@ -27,7 +27,9 @@ _RECOMMENDATION_RE = re.compile(
 _PROHIBITION_RE = re.compile(
     r"\bMUST\s+NOT\b|\bmust\s+not\b|"
     r"\bSHOULD\s+NOT\b|\bshould\s+not\b|"
-    r"\bdo\s+not\b|\bdon't\b|\bavoid\b",
+    r"(?:^|[,:;]\s+)[Dd]o\s+not\b|"
+    r"(?:^|[,:;]\s+)[Dd]on't\b|"
+    r"^[Aa]void\b",
 )
 _DEPRECATION_RE = re.compile(r"\bdeprecated\b")
 _PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")

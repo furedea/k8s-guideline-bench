@@ -235,18 +235,21 @@ def test_extract_sentence_selection_artifacts_includes_do_not_and_avoid_prohibit
     document = """
 ## Section
 
-Fields do not use underscores. Kinds avoid the deprecated FooController naming pattern.
+Do not use underscores. Avoid the deprecated FooController naming pattern. Fields that do not have an `omitempty` json tag default to zero. This exists to avoid ambiguity.
 """.strip()
 
     artifacts = normative_audit.extract_sentence_selection_artifacts(document)
 
     assert [task.main_sentence.text for task in artifacts.tasks] == [
-        "Fields do not use underscores.",
-        "Kinds avoid the deprecated FooController naming pattern.",
+        "Do not use underscores.",
+        "Avoid the deprecated FooController naming pattern.",
     ]
-    assert [record.signal_tags for record in artifacts.audit_records] == [
-        (normative_audit.SignalTag.PROHIBITION,),
-        (normative_audit.SignalTag.PROHIBITION, normative_audit.SignalTag.DEPRECATION),
+    assert [(record.selection_status, record.signal_tags) for record in artifacts.audit_records] == [
+        (normative_audit.SelectionStatus.INCLUDED, (normative_audit.SignalTag.PROHIBITION,)),
+        (
+            normative_audit.SelectionStatus.INCLUDED,
+            (normative_audit.SignalTag.PROHIBITION, normative_audit.SignalTag.DEPRECATION),
+        ),
     ]
 
 
