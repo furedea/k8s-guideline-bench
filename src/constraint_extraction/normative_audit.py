@@ -20,6 +20,21 @@ _KEYWORD_RE = re.compile(
     r"required|recommended|preferred|deprecated"
     r")\b",
 )
+_OBLIGATION_RE = re.compile(r"\bMUST\b(?!\s+NOT\b)|\bmust\b(?!\s+not\b)|\brequired\b")
+_RECOMMENDATION_RE = re.compile(
+    r"\bSHOULD\b(?!\s+NOT\b)|\bshould\b(?!\s+not\b)|\brecommended\b|\bpreferred\b",
+)
+_PROHIBITION_RE = re.compile(
+    r"\bMUST\s+NOT\b|\bmust\s+not\b|"
+    r"\bSHOULD\s+NOT\b|\bshould\s+not\b|"
+    r"(?:^|[,:;]\s+)[Dd]o\s+not\b|"
+    r"(?:^|[,:;]\s+)[Dd]on't\b|"
+    r"^[Aa]void\b",
+)
+_DEPRECATION_RE = re.compile(r"\bdeprecated\b")
+_PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")
+_EXAMPLE_SENTENCE_RE = re.compile(r"^Examples?:")
+_HTTP_STATUS_CODE_LABEL_RE = re.compile(r"^`?\d{3}\s+Status[A-Za-z0-9]+`?$")
 
 
 class CandidateKind(enum.StrEnum):
@@ -36,6 +51,23 @@ class AuditStatus(enum.StrEnum):
     UNMATCHED = "unmatched"
 
 
+class SignalTag(enum.StrEnum):
+    """Internal source wording tags used for extraction audit."""
+
+    OBLIGATION = "obligation"
+    RECOMMENDATION = "recommendation"
+    PROHIBITION = "prohibition"
+    DEPRECATION = "deprecation"
+    PERMISSIVE = "permissive"
+
+
+class SelectionStatus(enum.StrEnum):
+    """Whether a signal-bearing sentence becomes a sentence selection task."""
+
+    INCLUDED = "included"
+    EXCLUDED = "excluded"
+
+
 class KeywordCandidate(base.FrozenModel):
     """A single keyword-bearing normative candidate extracted from the document."""
 
@@ -46,12 +78,24 @@ class KeywordCandidate(base.FrozenModel):
     lead_in_span: str | None = None
 
 
+class SourceBlock(base.FrozenModel):
+    """A markdown source block with its section and bullet ancestry."""
+
+    start_line: int
+    end_line: int
+    section: str
+    kind: CandidateKind
+    text: str
+    ancestor_bullets: tuple[str, ...] = ()
+
+
 class SourceSentence(base.FrozenModel):
     """A source sentence split from one original guideline block."""
 
     id: str
     text: str
     has_keyword: bool
+    signal_tags: tuple[SignalTag, ...] = ()
 
 
 class SentenceSelectionTask(base.FrozenModel):
@@ -75,6 +119,26 @@ class ContextSelectionConflict(base.FrozenModel):
     sentence_id: str
     sentence_text: str
     task_ids: tuple[str, ...]
+
+
+class SentenceSelectionAuditRecord(base.FrozenModel):
+    """Internal audit record for a signal-bearing source sentence."""
+
+    block_id: str
+    source_span: str
+    section: str
+    kind: CandidateKind
+    sentence: SourceSentence
+    selection_status: SelectionStatus
+    signal_tags: tuple[SignalTag, ...]
+    exclusion_reason: str | None = None
+
+
+class SentenceSelectionArtifacts(base.FrozenModel):
+    """Sentence selection tasks plus the internal inclusion audit."""
+
+    tasks: tuple[SentenceSelectionTask, ...]
+    audit_records: tuple[SentenceSelectionAuditRecord, ...]
 
 
 class KeywordNormativeRule(base.FrozenModel):
@@ -136,9 +200,9 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
     blocks = _collect_blocks(document_text)
     candidates: list[KeywordCandidate] = []
     pending_bullet_lead_in: tuple[str, str] | None = None
-    for start_line, end_line, section, kind, block_text in blocks:
-        if kind == CandidateKind.BULLET:
-            normalized = _normalize_block_text(block_text)
+    for block in blocks:
+        if block.kind == CandidateKind.BULLET:
+            normalized = _normalize_block_text(block.text)
             lead_in_span = None
             if pending_bullet_lead_in is not None:
                 lead_in_text, lead_in_span = pending_bullet_lead_in
@@ -146,25 +210,25 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
             if _KEYWORD_RE.search(normalized):
                 candidates.append(
                     KeywordCandidate(
-                        source_span=f"{start_line}-{end_line}",
-                        section=section,
-                        kind=kind,
+                        source_span=f"{block.start_line}-{block.end_line}",
+                        section=block.section,
+                        kind=block.kind,
                         text=normalized,
                         lead_in_span=lead_in_span,
                     ),
                 )
             continue
         pending_bullet_lead_in = None
-        sentences = _split_paragraph_sentences(block_text)
-        if _is_bullet_lead_in(block_text):
-            lead_in_text = _normalize_block_text(block_text)
-            pending_bullet_lead_in = (lead_in_text, f"{start_line}-{end_line}")
+        sentences = _split_paragraph_sentences(block.text)
+        if _is_bullet_lead_in(block.text):
+            lead_in_text = _normalize_block_text(block.text)
+            pending_bullet_lead_in = (lead_in_text, f"{block.start_line}-{block.end_line}")
             continue
         candidates.extend(
             KeywordCandidate(
-                source_span=f"{start_line}-{end_line}",
-                section=section,
-                kind=kind,
+                source_span=f"{block.start_line}-{block.end_line}",
+                section=block.section,
+                kind=block.kind,
                 text=sentence,
             )
             for sentence in sentences
@@ -175,23 +239,39 @@ def extract_keyword_candidates(document_text: str) -> tuple[KeywordCandidate, ..
 
 def extract_sentence_selection_tasks(document_text: str) -> tuple[SentenceSelectionTask, ...]:
     """Extract keyword sentences with their original block and nearby context candidates."""
+    return extract_sentence_selection_artifacts(document_text).tasks
+
+
+def extract_sentence_selection_artifacts(document_text: str) -> SentenceSelectionArtifacts:
+    """Extract sentence selection tasks and the inclusion audit."""
     tasks: list[SentenceSelectionTask] = []
-    for block_index, (start_line, end_line, section, kind, block_text) in enumerate(
-        _collect_blocks(document_text),
-        1,
-    ):
+    audit_records: list[SentenceSelectionAuditRecord] = []
+    for block_index, block in enumerate(_collect_blocks(document_text), 1):
         block_id = f"block_{block_index:04d}"
-        block_original = _normalize_block_text(block_text)
-        sentences = _source_sentences(block_text)
+        block_original = _normalize_block_text(block.text)
+        sentences = _source_sentences(block.text)
+        sentences = _exclude_reference_child_tasks(sentences, block)
         keyword_positions = tuple(index for index, sentence in enumerate(sentences) if sentence.has_keyword)
         shared_context_sentences = _shared_context_sentences(sentences, keyword_positions)
+        audit_records.extend(
+            _sentence_selection_audit_record(
+                block_id=block_id,
+                source_span=f"{block.start_line}-{block.end_line}",
+                section=block.section,
+                kind=block.kind,
+                sentence=sentence,
+                block=block,
+            )
+            for sentence in sentences
+            if sentence.signal_tags
+        )
         tasks.extend(
             SentenceSelectionTask(
                 id=f"{block_id}_{sentences[keyword_position].id}",
                 block_id=block_id,
-                source_span=f"{start_line}-{end_line}",
-                section=section,
-                kind=kind,
+                source_span=f"{block.start_line}-{block.end_line}",
+                section=block.section,
+                kind=block.kind,
                 block_original=block_original,
                 main_sentence=sentences[keyword_position],
                 shared_context_sentences=shared_context_sentences,
@@ -203,7 +283,7 @@ def extract_sentence_selection_tasks(document_text: str) -> tuple[SentenceSelect
             )
             for keyword_position_index, keyword_position in enumerate(keyword_positions)
         )
-    return tuple(tasks)
+    return SentenceSelectionArtifacts(tasks=tuple(tasks), audit_records=tuple(audit_records))
 
 
 def build_selected_original(task: SentenceSelectionTask, selected_context_sentence_ids: tuple[str, ...]) -> str:
@@ -344,6 +424,24 @@ def save_sentence_selection_tasks(
     )
 
 
+def save_sentence_selection_audit(
+    audit_records: tuple[SentenceSelectionAuditRecord, ...],
+    output_path: Path,
+) -> None:
+    """Save sentence selection inclusion audit as JSON."""
+    payload = {
+        "summary": {
+            "included": sum(record.selection_status == SelectionStatus.INCLUDED for record in audit_records),
+            "excluded": sum(record.selection_status == SelectionStatus.EXCLUDED for record in audit_records),
+        },
+        "records": [record.model_dump(mode="json") for record in audit_records],
+    }
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def render_audit_markdown(audit_result: NormativeAuditResult) -> str:
     """Render a markdown summary for a normative keyword audit."""
     lines = [
@@ -400,14 +498,15 @@ def infer_strength_signal(text: str) -> normative_constraint.NormativeSignal:
     return matches[0][2]
 
 
-def _collect_blocks(document_text: str) -> tuple[tuple[int, int, str, CandidateKind, str], ...]:  # noqa: PLR0915
+def _collect_blocks(document_text: str) -> tuple[SourceBlock, ...]:  # noqa: PLR0912, PLR0915
     """Collect markdown blocks while preserving bullet boundaries."""
-    blocks: list[tuple[int, int, str, CandidateKind, str]] = []
+    blocks: list[SourceBlock] = []
     current_section = ""
     seen_first_section = False
     lines = document_text.splitlines()
     index = 0
     in_code_block = False
+    bullet_stack: list[tuple[int, str]] = []
 
     while index < len(lines):
         line_number = index + 1
@@ -427,6 +526,7 @@ def _collect_blocks(document_text: str) -> tuple[tuple[int, int, str, CandidateK
         if heading_match:
             current_section = heading_match.group(2).strip()
             seen_first_section = True
+            bullet_stack = []
             index += 1
             continue
 
@@ -435,13 +535,19 @@ def _collect_blocks(document_text: str) -> tuple[tuple[int, int, str, CandidateK
             continue
 
         if not stripped:
+            bullet_stack = []
             index += 1
             continue
 
         bullet_match = _BULLET_RE.match(line)
         if bullet_match:
             start_line = line_number
-            bullet_lines = [bullet_match.group(3).strip()]
+            bullet_indent = len(bullet_match.group(1))
+            bullet_text = bullet_match.group(3).strip()
+            while bullet_stack and bullet_stack[-1][0] >= bullet_indent:
+                _ = bullet_stack.pop()
+            ancestor_bullets = tuple(parent_text for _, parent_text in bullet_stack)
+            bullet_lines = [bullet_text]
             index += 1
             while index < len(lines):
                 next_line = lines[index]
@@ -452,17 +558,21 @@ def _collect_blocks(document_text: str) -> tuple[tuple[int, int, str, CandidateK
                     break
                 bullet_lines.append(next_stripped)
                 index += 1
+            block_text = " ".join(bullet_lines).strip()
             blocks.append(
-                (
-                    start_line,
-                    index,
-                    current_section,
-                    CandidateKind.BULLET,
-                    " ".join(bullet_lines).strip(),
+                SourceBlock(
+                    start_line=start_line,
+                    end_line=index,
+                    section=current_section,
+                    kind=CandidateKind.BULLET,
+                    text=block_text,
+                    ancestor_bullets=ancestor_bullets,
                 ),
             )
+            bullet_stack.append((bullet_indent, bullet_text))
             continue
 
+        bullet_stack = []
         start_line = line_number
         paragraph_lines = [stripped]
         index += 1
@@ -479,12 +589,12 @@ def _collect_blocks(document_text: str) -> tuple[tuple[int, int, str, CandidateK
             paragraph_lines.append(next_stripped)
             index += 1
         blocks.append(
-            (
-                start_line,
-                index,
-                current_section,
-                CandidateKind.PARAGRAPH_SENTENCE,
-                " ".join(paragraph_lines).strip(),
+            SourceBlock(
+                start_line=start_line,
+                end_line=index,
+                section=current_section,
+                kind=CandidateKind.PARAGRAPH_SENTENCE,
+                text=" ".join(paragraph_lines).strip(),
             ),
         )
 
@@ -511,14 +621,102 @@ def _split_paragraph_sentences(block_text: str) -> tuple[str, ...]:
 
 def _source_sentences(block_text: str) -> tuple[SourceSentence, ...]:
     """Split one block into numbered source sentences."""
-    return tuple(
-        SourceSentence(
-            id=f"s{index}",
-            text=sentence,
-            has_keyword=_KEYWORD_RE.search(sentence) is not None,
+    source_sentences: list[SourceSentence] = []
+    for index, sentence in enumerate(_split_paragraph_sentences(block_text), 1):
+        signal_tags = _sentence_signal_tags(sentence)
+        source_sentences.append(
+            SourceSentence(
+                id=f"s{index}",
+                text=sentence,
+                has_keyword=_is_included_signal(signal_tags) and not _is_example_sentence(sentence),
+                signal_tags=signal_tags,
+            ),
         )
-        for index, sentence in enumerate(_split_paragraph_sentences(block_text), 1)
+    return tuple(source_sentences)
+
+
+def _exclude_reference_child_tasks(
+    sentences: tuple[SourceSentence, ...],
+    block: SourceBlock,
+) -> tuple[SourceSentence, ...]:
+    """Demote sentences that describe an enumerated reference item."""
+    if not _has_http_status_code_ancestor(block):
+        return sentences
+    return tuple(sentence.model_copy(update={"has_keyword": False}) for sentence in sentences)
+
+
+def _sentence_selection_audit_record(
+    *,
+    block_id: str,
+    source_span: str,
+    section: str,
+    kind: CandidateKind,
+    sentence: SourceSentence,
+    block: SourceBlock,
+) -> SentenceSelectionAuditRecord:
+    """Build an audit record for one signal-bearing sentence."""
+    selection_status = SelectionStatus.INCLUDED if sentence.has_keyword else SelectionStatus.EXCLUDED
+    exclusion_reason = _sentence_selection_exclusion_reason(
+        sentence=sentence,
+        selection_status=selection_status,
+        block=block,
     )
+    return SentenceSelectionAuditRecord(
+        block_id=block_id,
+        source_span=source_span,
+        section=section,
+        kind=kind,
+        sentence=sentence,
+        selection_status=selection_status,
+        signal_tags=sentence.signal_tags,
+        exclusion_reason=exclusion_reason,
+    )
+
+
+def _sentence_selection_exclusion_reason(
+    *,
+    sentence: SourceSentence,
+    selection_status: SelectionStatus,
+    block: SourceBlock,
+) -> str | None:
+    """Return why a signal-bearing sentence was not promoted to a task."""
+    if selection_status == SelectionStatus.INCLUDED:
+        return None
+    if _has_http_status_code_ancestor(block):
+        return "http_status_code_child"
+    if _is_example_sentence(sentence.text):
+        return "example_sentence"
+    return "permissive_only"
+
+
+def _sentence_signal_tags(text: str) -> tuple[SignalTag, ...]:
+    """Return internal source wording tags matched by a sentence."""
+    tags: list[SignalTag] = []
+    for pattern, tag in (
+        (_OBLIGATION_RE, SignalTag.OBLIGATION),
+        (_RECOMMENDATION_RE, SignalTag.RECOMMENDATION),
+        (_PROHIBITION_RE, SignalTag.PROHIBITION),
+        (_DEPRECATION_RE, SignalTag.DEPRECATION),
+        (_PERMISSIVE_RE, SignalTag.PERMISSIVE),
+    ):
+        if pattern.search(text):
+            tags.append(tag)
+    return tuple(tags)
+
+
+def _is_included_signal(signal_tags: tuple[SignalTag, ...]) -> bool:
+    """Return whether signal tags are strong enough to become a task."""
+    return any(tag != SignalTag.PERMISSIVE for tag in signal_tags)
+
+
+def _is_example_sentence(text: str) -> bool:
+    """Return whether a sentence is an example, not a rule statement."""
+    return _EXAMPLE_SENTENCE_RE.search(text) is not None
+
+
+def _has_http_status_code_ancestor(block: SourceBlock) -> bool:
+    """Return whether a block is nested under an HTTP status code label."""
+    return any(_HTTP_STATUS_CODE_LABEL_RE.search(parent) is not None for parent in block.ancestor_bullets)
 
 
 def _unknown_context_sentence_ids(
