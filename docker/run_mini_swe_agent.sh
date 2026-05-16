@@ -32,9 +32,13 @@ function main() {
   readonly MINI_PYTHON="${MINI_SWE_AGENT_PYTHON:-/opt/mini-swe-agent/bin/python}"
   readonly MINI_CONFIG_SOURCE_PATH="${MINI_SWE_AGENT_CONFIG_PATH:-$(
     "${MINI_PYTHON}" - <<'PY'
-from minisweagent.config import builtin_config_dir
+import contextlib
+import sys
 
-print(builtin_config_dir / "mini.yaml")
+with contextlib.redirect_stdout(sys.stderr):
+    from minisweagent.config import builtin_config_dir
+
+sys.stdout.write(str(builtin_config_dir / "mini.yaml"))
 PY
   )}"
   readonly MINI_RUNTIME_CONFIG_PATH="${OUTPUT_DIR}/mini_runtime.yaml"
