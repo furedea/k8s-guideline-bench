@@ -412,21 +412,22 @@ uv run python src/constraint_extraction/main.py sentence-selection-tasks
 
 `sentence_context_selection.json` は，正常で再利用可能な結果が既にある場合は skip します．抽出ロジックや task の中身を変えた後に完全にやり直したい場合は，古いファイルを `.old` に移動してから実行します．
 
-Codex を one-shot で使う例：
+Codex を batch 実行で使う例：
 
 ```bash
 uv run python src/constraint_extraction/main.py sentence-context-selection \
-  --model gpt-5.2
+  --batch-size 25
 ```
 
-`codex` コマンド名や timeout を変える場合：
+`codex` コマンド名，model，timeout を変える場合：
 
 ```bash
 uv run python src/constraint_extraction/main.py sentence-context-selection \
   --codex-command codex \
   --model gpt-5.2 \
   --timeout-seconds 1800 \
-  --max-retries 3
+  --max-retries 3 \
+  --batch-size 25
 ```
 
 Codex が存在しない sentence ID を選んだ場合や，同じ通常 context sentence を複数の `main_sentence` に選んだ場合は，該当 task だけを自動で再実行します．`--max-retries` 回連続で直らない場合は停止し，どの task がどの理由で失敗したかを表示します．

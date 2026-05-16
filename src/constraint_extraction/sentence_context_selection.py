@@ -144,8 +144,40 @@ def select_sentence_contexts_with_codex(
     timeout_seconds: int = 1800,
     stream_output: bool = False,
     max_retries: int = 3,
+    batch_size: int = 25,
 ) -> SentenceContextSelectionReport:
-    """Run Codex once to select context sentence IDs and validate the result."""
+    """Run Codex in batches to select context sentence IDs and validate the result."""
+    reports = tuple(
+        _select_sentence_context_batch_with_codex(
+            batch,
+            codex_command=codex_command,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            stream_output=stream_output,
+            max_retries=max_retries,
+        )
+        for batch in _task_batches(tasks, batch_size)
+    )
+    return SentenceContextSelectionReport(
+        selections=tuple(selection for report in reports for selection in report.selections),
+        conflicts=tuple(conflict for report in reports for conflict in report.conflicts),
+        invalid_context_selections=tuple(
+            invalid_selection for report in reports for invalid_selection in report.invalid_context_selections
+        ),
+        retry_attempts=tuple(retry_attempt for report in reports for retry_attempt in report.retry_attempts),
+    )
+
+
+def _select_sentence_context_batch_with_codex(
+    tasks: tuple[normative_audit.SentenceSelectionTask, ...],
+    *,
+    codex_command: str,
+    model: str | None,
+    timeout_seconds: int,
+    stream_output: bool,
+    max_retries: int,
+) -> SentenceContextSelectionReport:
+    """Run Codex once for one task batch, retrying invalid selections."""
     tasks_by_id = {task.id: task for task in tasks}
     selected_ids_by_task_id: dict[str, tuple[str, ...]] = {}
     retry_attempts: list[SelectionRetryAttempt] = []
@@ -206,6 +238,41 @@ def select_sentence_contexts_with_codex(
         invalid_context_selections=invalid_context_selections,
         retry_attempts=tuple(retry_attempts),
     )
+
+
+def _task_batches(
+    tasks: tuple[normative_audit.SentenceSelectionTask, ...],
+    batch_size: int,
+) -> tuple[tuple[normative_audit.SentenceSelectionTask, ...], ...]:
+    """Split tasks into batches while keeping same-block tasks together."""
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    batches: list[tuple[normative_audit.SentenceSelectionTask, ...]] = []
+    current_batch: list[normative_audit.SentenceSelectionTask] = []
+    current_block_tasks: list[normative_audit.SentenceSelectionTask] = []
+    current_block_id: str | None = None
+
+    def flush_block() -> None:
+        nonlocal current_batch, current_block_tasks
+        if not current_block_tasks:
+            return
+        if current_batch and len(current_batch) + len(current_block_tasks) > batch_size:
+            batches.append(tuple(current_batch))
+            current_batch = []
+        current_batch.extend(current_block_tasks)
+        current_block_tasks = []
+
+    for task in tasks:
+        if current_block_id is None:
+            current_block_id = task.block_id
+        if task.block_id != current_block_id:
+            flush_block()
+            current_block_id = task.block_id
+        current_block_tasks.append(task)
+    flush_block()
+    if current_batch:
+        batches.append(tuple(current_batch))
+    return tuple(batches)
 
 
 def run_codex_context_selection(

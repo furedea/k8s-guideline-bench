@@ -33,6 +33,7 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_context_selection.call_args.args[0].model is None
     assert sentence_context_selection.call_args.args[0].timeout_seconds == 1800
     assert sentence_context_selection.call_args.args[0].max_retries == 3
+    assert sentence_context_selection.call_args.args[0].batch_size == 25
     assert sentence_context_selection.call_args.args[0].stream_codex_output is False
     review_sheet.assert_called_once()
     assert review_sheet.call_args.args[0].norms_path is None
@@ -105,6 +106,7 @@ Optionality affects API compatibility. Fields must be either optional or require
             model="gpt-5.2",
             timeout_seconds=120,
             max_retries=2,
+            batch_size=10,
             stream_codex_output=True,
         ),
     )
@@ -114,6 +116,7 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert select_contexts.call_args.kwargs["model"] == "gpt-5.2"
     assert select_contexts.call_args.kwargs["timeout_seconds"] == 120
     assert select_contexts.call_args.kwargs["max_retries"] == 2
+    assert select_contexts.call_args.kwargs["batch_size"] == 10
     assert select_contexts.call_args.kwargs["stream_output"] is True
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["selections"][0]["original"] == (
@@ -123,7 +126,7 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert "[sentence-context-selection] loading tasks from" in output
     assert (
         "[sentence-context-selection] running codex for 1 tasks "
-        "(model=gpt-5.2, timeout=120s, max_retries=2, stream_codex_output=True)" in output
+        "(model=gpt-5.2, timeout=120s, max_retries=2, batch_size=10, stream_codex_output=True)" in output
     )
     assert "[sentence-context-selection] writing report to" in output
     assert "[sentence-context-selection] selections=1" in output
@@ -170,6 +173,7 @@ Optionality affects API compatibility. Fields must be either optional or require
             model=None,
             timeout_seconds=120,
             max_retries=2,
+            batch_size=25,
             stream_codex_output=False,
         ),
     )
