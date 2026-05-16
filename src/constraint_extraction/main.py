@@ -82,6 +82,7 @@ def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser
     _ = parser.add_argument("--codex-command", type=str, default="codex")
     _ = parser.add_argument("--model", type=str, default=None)
     _ = parser.add_argument("--timeout-seconds", type=int, default=1800)
+    _ = parser.add_argument("--max-retries", type=int, default=3)
     parser.set_defaults(func=_run_sentence_context_selection)
 
 
@@ -140,7 +141,8 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
     print(
         f"[sentence-context-selection] running codex for {len(tasks)} tasks "
-        f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s)",
+        f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "
+        f"max_retries={arguments.max_retries})",
         flush=True,
     )
     report = sentence_context_selection.select_sentence_contexts_with_codex(
@@ -148,6 +150,7 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
         codex_command=arguments.codex_command,
         model=arguments.model,
         timeout_seconds=arguments.timeout_seconds,
+        max_retries=arguments.max_retries,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +159,7 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     print(f"[sentence-context-selection] selections={len(report.selections)}")
     print(f"[sentence-context-selection] conflicts={len(report.conflicts)}")
     print(f"[sentence-context-selection] invalid_context_selections={len(report.invalid_context_selections)}")
+    print(f"[sentence-context-selection] retry_attempts={len(report.retry_attempts)}")
     for invalid_selection in report.invalid_context_selections[:10]:
         print(
             "[sentence-context-selection] invalid "

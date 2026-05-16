@@ -70,6 +70,7 @@ Optionality affects API compatibility. Fields must be either optional or require
             codex_command="codex",
             model="gpt-5.2",
             timeout_seconds=120,
+            max_retries=2,
         ),
     )
 
@@ -77,14 +78,18 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert select_contexts.call_args.kwargs["codex_command"] == "codex"
     assert select_contexts.call_args.kwargs["model"] == "gpt-5.2"
     assert select_contexts.call_args.kwargs["timeout_seconds"] == 120
+    assert select_contexts.call_args.kwargs["max_retries"] == 2
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["selections"][0]["original"] == (
         "Optionality affects API compatibility. Fields must be either optional or required."
     )
     output = capsys.readouterr().out
     assert "[sentence-context-selection] loading tasks from" in output
-    assert "[sentence-context-selection] running codex for 1 tasks (model=gpt-5.2, timeout=120s)" in output
+    assert (
+        "[sentence-context-selection] running codex for 1 tasks (model=gpt-5.2, timeout=120s, max_retries=2)" in output
+    )
     assert "[sentence-context-selection] writing report to" in output
     assert "[sentence-context-selection] selections=1" in output
     assert "[sentence-context-selection] conflicts=0" in output
     assert "[sentence-context-selection] invalid_context_selections=0" in output
+    assert "[sentence-context-selection] retry_attempts=0" in output

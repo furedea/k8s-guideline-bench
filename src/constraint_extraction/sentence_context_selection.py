@@ -29,12 +29,22 @@ class InvalidContextSelection(base.FrozenModel):
     reason: str
 
 
+class SelectionRetryAttempt(base.FrozenModel):
+    """One failed Codex selection attempt that triggered a retry."""
+
+    attempt: int
+    task_ids: tuple[str, ...]
+    reason: str
+    details: tuple[str, ...] = ()
+
+
 class SentenceContextSelectionReport(base.FrozenModel):
     """LLM sentence context selection report."""
 
     selections: tuple[SentenceContextSelection, ...]
     conflicts: tuple[normative_audit.ContextSelectionConflict, ...]
     invalid_context_selections: tuple[InvalidContextSelection, ...] = ()
+    retry_attempts: tuple[SelectionRetryAttempt, ...] = ()
 
 
 class CodexContextSelectionError(RuntimeError):
@@ -51,6 +61,18 @@ class CodexContextSelectionError(RuntimeError):
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
+
+
+class SentenceContextSelectionRetryError(RuntimeError):
+    """Codex kept returning invalid sentence context selections."""
+
+    def __init__(self, *, attempts: tuple[SelectionRetryAttempt, ...]) -> None:
+        latest = attempts[-1]
+        super().__init__(
+            "sentence context selection failed after retries: "
+            f"attempt={latest.attempt} reason={latest.reason} task_ids={', '.join(latest.task_ids)}",
+        )
+        self.attempts = attempts
 
 
 def load_sentence_selection_tasks(path: Path) -> tuple[normative_audit.SentenceSelectionTask, ...]:
@@ -71,26 +93,60 @@ def select_sentence_contexts_with_codex(
     model: str | None = None,
     timeout_seconds: int = 1800,
     stream_output: bool = True,
+    max_retries: int = 3,
 ) -> SentenceContextSelectionReport:
     """Run Codex once to select context sentence IDs and validate the result."""
-    response = run_codex_context_selection(
-        build_context_selection_prompt(tasks),
-        codex_command=codex_command,
-        model=model,
-        timeout_seconds=timeout_seconds,
-        stream_output=stream_output,
-    )
-    selected_ids_by_task_id = _parse_selection_response(response, tasks)
-    sanitized_ids_by_task_id, invalid_context_selections = _sanitize_selected_context_ids(
-        tasks,
-        selected_ids_by_task_id,
-    )
-    conflicts = normative_audit.find_context_selection_conflicts(tasks, sanitized_ids_by_task_id)
+    tasks_by_id = {task.id: task for task in tasks}
+    selected_ids_by_task_id: dict[str, tuple[str, ...]] = {}
+    retry_attempts: list[SelectionRetryAttempt] = []
+    pending_tasks = tasks
+    retry_feedback: tuple[SelectionRetryAttempt, ...] = ()
+    invalid_context_selections: tuple[InvalidContextSelection, ...] = ()
+    conflicts: tuple[normative_audit.ContextSelectionConflict, ...] = ()
+
+    for attempt in range(1, max_retries + 2):
+        response = run_codex_context_selection(
+            build_context_selection_prompt(pending_tasks, retry_feedback=retry_feedback),
+            codex_command=codex_command,
+            model=model,
+            timeout_seconds=timeout_seconds,
+            stream_output=stream_output,
+        )
+        attempt_selected_ids, missing_task_ids, extra_task_ids = _parse_selection_response(response, pending_tasks)
+        selected_ids_by_task_id.update(attempt_selected_ids)
+        sanitized_ids_by_task_id, invalid_context_selections = _sanitize_selected_context_ids(
+            tuple(tasks_by_id[task_id] for task_id in selected_ids_by_task_id),
+            selected_ids_by_task_id,
+        )
+        selected_ids_by_task_id = sanitized_ids_by_task_id
+        conflicts = normative_audit.find_context_selection_conflicts(
+            tuple(tasks_by_id[task_id] for task_id in selected_ids_by_task_id),
+            selected_ids_by_task_id,
+        )
+        retry_feedback = _retry_attempts_for_validation(
+            attempt=attempt,
+            missing_task_ids=missing_task_ids,
+            extra_task_ids=extra_task_ids,
+            invalid_context_selections=invalid_context_selections,
+            conflicts=conflicts,
+        )
+        if not retry_feedback and len(selected_ids_by_task_id) == len(tasks):
+            break
+        retry_attempts.extend(retry_feedback)
+        retry_task_ids = _retry_task_ids(retry_feedback)
+        for task_id in retry_task_ids:
+            selected_ids_by_task_id.pop(task_id, None)
+        if attempt > max_retries:
+            raise SentenceContextSelectionRetryError(attempts=tuple(retry_attempts))
+        pending_tasks = tuple(tasks_by_id[task_id] for task_id in retry_task_ids if task_id in tasks_by_id)
+        if not pending_tasks:
+            raise SentenceContextSelectionRetryError(attempts=tuple(retry_attempts))
+
     selections = tuple(
         SentenceContextSelection(
             task_id=task.id,
-            selected_context_sentence_ids=sanitized_ids_by_task_id[task.id],
-            original=normative_audit.build_selected_original(task, sanitized_ids_by_task_id[task.id]),
+            selected_context_sentence_ids=selected_ids_by_task_id[task.id],
+            original=normative_audit.build_selected_original(task, selected_ids_by_task_id[task.id]),
         )
         for task in tasks
     )
@@ -98,6 +154,7 @@ def select_sentence_contexts_with_codex(
         selections=selections,
         conflicts=conflicts,
         invalid_context_selections=invalid_context_selections,
+        retry_attempts=tuple(retry_attempts),
     )
 
 
@@ -159,7 +216,11 @@ def run_codex_context_selection(
         return completed.stdout
 
 
-def build_context_selection_prompt(tasks: tuple[normative_audit.SentenceSelectionTask, ...]) -> str:
+def build_context_selection_prompt(
+    tasks: tuple[normative_audit.SentenceSelectionTask, ...],
+    *,
+    retry_feedback: tuple[SelectionRetryAttempt, ...] = (),
+) -> str:
     """Build a JSON-only context selection prompt."""
     task_payload = [
         {
@@ -175,6 +236,13 @@ def build_context_selection_prompt(tasks: tuple[normative_audit.SentenceSelectio
         }
         for task in tasks
     ]
+    retry_text = ""
+    if retry_feedback:
+        retry_payload = [attempt.model_dump(mode="json") for attempt in retry_feedback]
+        retry_text = (
+            "\nPrevious answer was invalid. Fix only the listed tasks and obey the validation feedback:\n"
+            f"{json.dumps(retry_payload, ensure_ascii=False, indent=2)}\n"
+        )
     return (
         "You are Codex. For each task, select the source sentence IDs that are needed as context for the "
         "main sentence.\n"
@@ -183,6 +251,7 @@ def build_context_selection_prompt(tasks: tuple[normative_audit.SentenceSelectio
         "Do not rewrite source text. Do not add explanations.\n"
         "Return JSON only with this schema:\n"
         '{"selections":[{"task_id":"...","selected_context_sentence_ids":["s1","s3"]}]}\n\n'
+        f"{retry_text}"
         f"Tasks:\n{json.dumps({'tasks': task_payload}, ensure_ascii=False, indent=2)}"
     )
 
@@ -198,7 +267,7 @@ def save_context_selection_report(report: SentenceContextSelectionReport, output
 def _parse_selection_response(
     response: str,
     tasks: tuple[normative_audit.SentenceSelectionTask, ...],
-) -> dict[str, tuple[str, ...]]:
+) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...], tuple[str, ...]]:
     document = json.loads(_extract_json_object(response))
     raw_selections = document["selections"]
     selected_ids_by_task_id: dict[str, tuple[str, ...]] = {}
@@ -211,14 +280,55 @@ def _parse_selection_response(
     expected_task_ids = {task.id for task in tasks}
     missing_task_ids = tuple(task_id for task_id in expected_task_ids if task_id not in selected_ids_by_task_id)
     extra_task_ids = tuple(task_id for task_id in selected_ids_by_task_id if task_id not in expected_task_ids)
-    if missing_task_ids or extra_task_ids:
-        details = []
-        if missing_task_ids:
-            details.append(f"missing={', '.join(sorted(missing_task_ids))}")
-        if extra_task_ids:
-            details.append(f"extra={', '.join(sorted(extra_task_ids))}")
-        raise ValueError(f"Selection response task mismatch: {'; '.join(details)}")
-    return selected_ids_by_task_id
+    selected_ids_by_task_id = {
+        task_id: ids for task_id, ids in selected_ids_by_task_id.items() if task_id in expected_task_ids
+    }
+    return selected_ids_by_task_id, missing_task_ids, extra_task_ids
+
+
+def _retry_attempts_for_validation(
+    *,
+    attempt: int,
+    missing_task_ids: tuple[str, ...],
+    extra_task_ids: tuple[str, ...],
+    invalid_context_selections: tuple[InvalidContextSelection, ...],
+    conflicts: tuple[normative_audit.ContextSelectionConflict, ...],
+) -> tuple[SelectionRetryAttempt, ...]:
+    retry_attempts: list[SelectionRetryAttempt] = []
+    if missing_task_ids:
+        retry_attempts.append(
+            SelectionRetryAttempt(attempt=attempt, task_ids=missing_task_ids, reason="missing_task_selection"),
+        )
+    if extra_task_ids:
+        retry_attempts.append(
+            SelectionRetryAttempt(attempt=attempt, task_ids=(), reason="unknown_task_id", details=extra_task_ids),
+        )
+    retry_attempts.extend(
+        SelectionRetryAttempt(
+            attempt=attempt,
+            task_ids=(invalid_selection.task_id,),
+            reason=invalid_selection.reason,
+            details=(invalid_selection.sentence_id,),
+        )
+        for invalid_selection in invalid_context_selections
+    )
+    retry_attempts.extend(
+        SelectionRetryAttempt(
+            attempt=attempt,
+            task_ids=conflict.task_ids,
+            reason="context_selection_conflict",
+            details=(conflict.sentence_id,),
+        )
+        for conflict in conflicts
+    )
+    return tuple(retry_attempts)
+
+
+def _retry_task_ids(retry_attempts: tuple[SelectionRetryAttempt, ...]) -> tuple[str, ...]:
+    task_ids: list[str] = []
+    for retry_attempt in retry_attempts:
+        task_ids.extend(retry_attempt.task_ids)
+    return tuple(dict.fromkeys(task_ids))
 
 
 def _sanitize_selected_context_ids(

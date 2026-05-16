@@ -340,7 +340,10 @@ uv run python src/constraint_extraction/main.py sentence-context-selection \
 uv run python src/constraint_extraction/main.py sentence-context-selection \
   --codex-command codex \
   --model gpt-5.2 \
-  --timeout-seconds 1800
+  --timeout-seconds 1800 \
+  --max-retries 3
 ```
 
-conflict が 0 でない場合は，同じ通常 context sentence が複数の `main_sentence` に選ばれています．その場合は，対象 task だけを再判定する必要があります．`shared_context_sentences` は共有してよい文なので，重複しても conflict にはしません．
+Codex が存在しない sentence ID を選んだ場合や，同じ通常 context sentence を複数の `main_sentence` に選んだ場合は，該当 task だけを自動で再実行します．`--max-retries` 回連続で直らない場合は停止し，どの task がどの理由で失敗したかを表示します．
+
+最終出力で conflict が 0 でない場合は，同じ通常 context sentence が複数の `main_sentence` に選ばれています．`shared_context_sentences` は共有してよい文なので，重複しても conflict にはしません．

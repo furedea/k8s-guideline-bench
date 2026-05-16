@@ -17,7 +17,7 @@ def test_select_sentence_contexts_with_codex_materializes_original_and_detects_c
             {
                 "selections": [
                     {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s3"]},
-                    {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1", "s3"]},
+                    {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1"]},
                 ],
             },
         ),
@@ -39,55 +39,127 @@ def test_select_sentence_contexts_with_codex_materializes_original_and_detects_c
         "Fields must be either optional or required. "
         "This avoids ambiguous client behavior."
     )
-    assert report.conflicts[0].sentence_id == "s3"
-    assert report.conflicts[0].task_ids == (tasks[0].id, tasks[1].id)
+    assert report.conflicts == ()
 
 
-def test_select_sentence_contexts_with_codex_rejects_missing_task_selection(mocker: MockerFixture) -> None:
+def test_select_sentence_contexts_with_codex_retries_missing_task_selection(mocker: MockerFixture) -> None:
+    tasks = _tasks()
+    codex_run = mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        side_effect=(
+            json.dumps(
+                {
+                    "selections": [
+                        {"task_id": tasks[0].id, "selected_context_sentence_ids": []},
+                    ],
+                },
+            ),
+            json.dumps(
+                {
+                    "selections": [
+                        {"task_id": tasks[1].id, "selected_context_sentence_ids": []},
+                    ],
+                },
+            ),
+        ),
+    )
+
+    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks)
+
+    assert codex_run.call_count == 2
+    assert report.retry_attempts[0].reason == "missing_task_selection"
+    assert report.retry_attempts[0].task_ids == (tasks[1].id,)
+    assert len(report.selections) == 2
+
+
+def test_select_sentence_contexts_with_codex_retries_unknown_context_ids(
+    mocker: MockerFixture,
+) -> None:
+    tasks = _tasks()
+    codex_run = mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        side_effect=(
+            json.dumps(
+                {
+                    "selections": [
+                        {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s99"]},
+                        {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1"]},
+                    ],
+                },
+            ),
+            json.dumps(
+                {
+                    "selections": [
+                        {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1"]},
+                    ],
+                },
+            ),
+        ),
+    )
+
+    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks)
+
+    assert codex_run.call_count == 2
+    assert report.selections[0].selected_context_sentence_ids == ("s1",)
+    assert report.invalid_context_selections == ()
+    assert report.retry_attempts[0].task_ids == (tasks[0].id,)
+    assert report.retry_attempts[0].reason == "unknown_context_sentence_id"
+    assert report.retry_attempts[0].details == ("s99",)
+
+
+def test_select_sentence_contexts_with_codex_retries_context_conflicts(mocker: MockerFixture) -> None:
+    tasks = _tasks()
+    mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        side_effect=(
+            json.dumps(
+                {
+                    "selections": [
+                        {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s3"]},
+                        {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1", "s3"]},
+                    ],
+                },
+            ),
+            json.dumps(
+                {
+                    "selections": [
+                        {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s3"]},
+                        {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1"]},
+                    ],
+                },
+            ),
+        ),
+    )
+
+    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks)
+
+    assert report.conflicts == ()
+    assert report.retry_attempts[0].reason == "context_selection_conflict"
+    assert report.retry_attempts[0].task_ids == (tasks[0].id, tasks[1].id)
+    assert report.retry_attempts[0].details == ("s3",)
+
+
+def test_select_sentence_contexts_with_codex_fails_after_retry_limit(mocker: MockerFixture) -> None:
     tasks = _tasks()
     mocker.patch(
         "sentence_context_selection.run_codex_context_selection",
         return_value=json.dumps(
             {
                 "selections": [
-                    {"task_id": tasks[0].id, "selected_context_sentence_ids": []},
+                    {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s99"]},
+                    {"task_id": tasks[1].id, "selected_context_sentence_ids": []},
                 ],
             },
         ),
     )
 
     try:
-        _ = sentence_context_selection.select_sentence_contexts_with_codex(
-            tasks,
-        )
-    except ValueError as exc:
-        assert "missing=" in str(exc)
+        _ = sentence_context_selection.select_sentence_contexts_with_codex(tasks, max_retries=1)
+    except sentence_context_selection.SentenceContextSelectionRetryError as exc:
+        assert exc.attempts[-1].attempt == 2
+        assert exc.attempts[-1].reason == "unknown_context_sentence_id"
     else:
-        raise AssertionError("Expected missing task selection to fail")
-
-
-def test_select_sentence_contexts_with_codex_records_and_drops_unknown_context_ids(
-    mocker: MockerFixture,
-) -> None:
-    tasks = _tasks()
-    mocker.patch(
-        "sentence_context_selection.run_codex_context_selection",
-        return_value=json.dumps(
-            {
-                "selections": [
-                    {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s99"]},
-                    {"task_id": tasks[1].id, "selected_context_sentence_ids": ["s1"]},
-                ],
-            },
-        ),
-    )
-
-    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks)
-
-    assert report.selections[0].selected_context_sentence_ids == ("s1",)
-    assert report.invalid_context_selections[0].task_id == tasks[0].id
-    assert report.invalid_context_selections[0].sentence_id == "s99"
-    assert report.invalid_context_selections[0].reason == "unknown_context_sentence_id"
+        raise AssertionError("Expected retry exhaustion to fail")
 
 
 def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
