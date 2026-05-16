@@ -44,27 +44,34 @@ Optionality affects API compatibility. Fields must be either optional or require
         json.dumps({"tasks": [task.model_dump(mode="json") for task in tasks]}),
         encoding="utf-8",
     )
-    fake_client = mocker.Mock()
-    fake_client.complete.return_value = json.dumps(
-        {"selections": [{"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1"]}]},
+    select_contexts = mocker.patch(
+        "main.sentence_context_selection.select_sentence_contexts_with_codex",
+        return_value=main.sentence_context_selection.SentenceContextSelectionReport(
+            selections=(
+                main.sentence_context_selection.SentenceContextSelection(
+                    task_id=tasks[0].id,
+                    selected_context_sentence_ids=("s1",),
+                    original="Optionality affects API compatibility. Fields must be either optional or required.",
+                ),
+            ),
+            conflicts=(),
+        ),
     )
-    build_client = mocker.patch("main.completion_client_factory.build_completion_client", return_value=fake_client)
 
     main._run_sentence_context_selection(
         argparse.Namespace(
             tasks_path=tasks_path,
             output_path=output_path,
-            client_type="claude_cli",
-            api_key_env=None,
-            base_url=None,
-            command="claude",
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
+            codex_command="codex",
+            model="gpt-5.2",
+            timeout_seconds=120,
         ),
     )
 
-    build_client.assert_called_once()
-    fake_client.complete.assert_called_once()
+    select_contexts.assert_called_once()
+    assert select_contexts.call_args.kwargs["codex_command"] == "codex"
+    assert select_contexts.call_args.kwargs["model"] == "gpt-5.2"
+    assert select_contexts.call_args.kwargs["timeout_seconds"] == 120
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["selections"][0]["original"] == (
         "Optionality affects API compatibility. Fields must be either optional or required."

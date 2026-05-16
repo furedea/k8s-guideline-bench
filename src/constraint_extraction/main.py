@@ -12,11 +12,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-for _stage in ("constraint_extraction", "agent_execution", "common", ""):
+for _stage in ("constraint_extraction", "common", ""):
     sys.path.insert(0, str(ROOT / "src" / _stage))
 
-import client_spec  # noqa: E402
-import completion_client_factory  # noqa: E402
 import normative_audit  # noqa: E402
 import sentence_context_selection  # noqa: E402
 
@@ -81,14 +79,9 @@ def _configure_sentence_selection_tasks_parser(parser: argparse.ArgumentParser) 
 def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--tasks-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
-    _ = parser.add_argument(
-        "--client-type", choices=[item.value for item in client_spec.ClientType], default="claude_cli"
-    )
-    _ = parser.add_argument("--api-key-env", type=str, default=None)
-    _ = parser.add_argument("--base-url", type=str, default=None)
-    _ = parser.add_argument("--command", type=str, default="claude")
-    _ = parser.add_argument("--model", type=str, required=True)
-    _ = parser.add_argument("--max-tokens", type=int, default=8192)
+    _ = parser.add_argument("--codex-command", type=str, default="codex")
+    _ = parser.add_argument("--model", type=str, default=None)
+    _ = parser.add_argument("--timeout-seconds", type=int, default=1800)
     parser.set_defaults(func=_run_sentence_context_selection)
 
 
@@ -143,19 +136,12 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
         docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
     )
     output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json")
-    spec = client_spec.ClientSpec(
-        client_type=arguments.client_type,
-        api_key_env=arguments.api_key_env,
-        base_url=arguments.base_url,
-        command=arguments.command,
-    )
-    client = completion_client_factory.build_completion_client(spec)
     tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
-    report = sentence_context_selection.select_sentence_contexts(
+    report = sentence_context_selection.select_sentence_contexts_with_codex(
         tasks,
-        client=client,
+        codex_command=arguments.codex_command,
         model=arguments.model,
-        max_tokens=arguments.max_tokens,
+        timeout_seconds=arguments.timeout_seconds,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

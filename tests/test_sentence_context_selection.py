@@ -1,24 +1,19 @@
 import json
+import subprocess
 from pathlib import Path
 
 import normative_audit
 import sentence_context_selection
+from pytest_mock import MockerFixture
 
 
-class FakeCompletionClient:
-    def __init__(self, response: str) -> None:
-        self.response = response
-        self.calls: list[dict[str, object]] = []
-
-    def complete(self, *, system: str, user: str, model: str, max_tokens: int) -> str:
-        self.calls.append({"system": system, "user": user, "model": model, "max_tokens": max_tokens})
-        return self.response
-
-
-def test_select_sentence_contexts_materializes_original_and_detects_conflicts() -> None:
+def test_select_sentence_contexts_with_codex_materializes_original_and_detects_conflicts(
+    mocker: MockerFixture,
+) -> None:
     tasks = _tasks()
-    client = FakeCompletionClient(
-        json.dumps(
+    codex_run = mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        return_value=json.dumps(
             {
                 "selections": [
                     {"task_id": tasks[0].id, "selected_context_sentence_ids": ["s1", "s3"]},
@@ -28,16 +23,17 @@ def test_select_sentence_contexts_materializes_original_and_detects_conflicts() 
         ),
     )
 
-    report = sentence_context_selection.select_sentence_contexts(
+    report = sentence_context_selection.select_sentence_contexts_with_codex(
         tasks,
-        client=client,
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
+        codex_command="codex",
+        model="gpt-5.2",
+        timeout_seconds=120,
     )
 
-    assert client.calls[0]["model"] == "claude-sonnet-4-6"
-    assert client.calls[0]["max_tokens"] == 1024
-    assert "Return JSON only" in str(client.calls[0]["user"])
+    codex_run.assert_called_once()
+    assert "Return JSON only" in codex_run.call_args.args[0]
+    assert codex_run.call_args.kwargs["model"] == "gpt-5.2"
+    assert codex_run.call_args.kwargs["timeout_seconds"] == 120
     assert report.selections[0].original == (
         "Optionality affects API compatibility. "
         "Fields must be either optional or required. "
@@ -47,10 +43,11 @@ def test_select_sentence_contexts_materializes_original_and_detects_conflicts() 
     assert report.conflicts[0].task_ids == (tasks[0].id, tasks[1].id)
 
 
-def test_select_sentence_contexts_rejects_missing_task_selection() -> None:
+def test_select_sentence_contexts_with_codex_rejects_missing_task_selection(mocker: MockerFixture) -> None:
     tasks = _tasks()
-    client = FakeCompletionClient(
-        json.dumps(
+    mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        return_value=json.dumps(
             {
                 "selections": [
                     {"task_id": tasks[0].id, "selected_context_sentence_ids": []},
@@ -60,16 +57,55 @@ def test_select_sentence_contexts_rejects_missing_task_selection() -> None:
     )
 
     try:
-        _ = sentence_context_selection.select_sentence_contexts(
+        _ = sentence_context_selection.select_sentence_contexts_with_codex(
             tasks,
-            client=client,
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
         )
     except ValueError as exc:
         assert "missing=" in str(exc)
     else:
         raise AssertionError("Expected missing task selection to fail")
+
+
+def test_run_codex_context_selection_invokes_codex_exec_with_schema_and_stdin(
+    mocker: MockerFixture,
+) -> None:
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        output_path = Path(command[command.index("--output-last-message") + 1])
+        output_path.write_text('{"selections":[]}', encoding="utf-8")
+        assert command[:2] == ["codex", "exec"]
+        assert "--output-schema" in command
+        assert command[-1] == "-"
+        assert kwargs["input"] == "prompt"
+        assert kwargs["timeout"] == 30
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    run = mocker.patch("sentence_context_selection.subprocess.run", side_effect=fake_run)
+
+    response = sentence_context_selection.run_codex_context_selection(
+        "prompt",
+        codex_command="codex",
+        model="gpt-5.2",
+        timeout_seconds=30,
+    )
+
+    assert response == '{"selections":[]}'
+    assert "--model" in run.call_args.args[0]
+
+
+def test_run_codex_context_selection_raises_on_non_zero_exit(mocker: MockerFixture) -> None:
+    mocker.patch(
+        "sentence_context_selection.subprocess.run",
+        return_value=subprocess.CompletedProcess(["codex"], 2, stdout="out", stderr="err"),
+    )
+
+    try:
+        _ = sentence_context_selection.run_codex_context_selection("prompt")
+    except sentence_context_selection.CodexContextSelectionError as exc:
+        assert exc.returncode == 2
+        assert exc.stdout == "out"
+        assert exc.stderr == "err"
+    else:
+        raise AssertionError("Expected codex failure to raise")
 
 
 def test_load_and_save_sentence_context_selection_report(tmp_path: Path) -> None:
