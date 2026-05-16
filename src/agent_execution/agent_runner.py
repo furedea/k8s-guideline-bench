@@ -269,6 +269,8 @@ def build_agentic_workspace_prompt(
         [
             "",
             "Inspect the repository and the referenced metadata files yourself.",
+            "Do not access external network resources.",
+            "Do not use curl, wget, gh, git fetch, or GitHub URLs.",
             "Modify files in the repository worktree to complete the refactoring.",
             "Preserve behavior and leave the worktree with only the intended changes.",
         ],

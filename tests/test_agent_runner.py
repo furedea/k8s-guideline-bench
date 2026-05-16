@@ -145,6 +145,25 @@ def test_agentic_workspace_prompt_omits_constraints_when_strategy_is_no_constrai
     assert "All JSON objects include a kind field." not in prompt
 
 
+def test_agentic_workspace_prompt_forbids_external_network_access(tmp_path: Path) -> None:
+    instance = _make_instance(tmp_path)
+    config = agent_runner.AgentRunConfig(
+        run_id="docker-run",
+        model="agent-model",
+        max_tokens=4096,
+        context_strategy=agent_runner.ContextStrategy.NO_CONSTRAINTS,
+        docker=agent_runner.DockerAgentConfig(
+            image="k8s-bench-agent",
+            agent_command='agent run "$AGENT_PROMPT_PATH"',
+        ),
+    )
+
+    prompt = agent_runner.build_agentic_workspace_prompt(instance, _constraints(), config)
+
+    assert "Do not access external network resources." in prompt
+    assert "Do not use curl, wget, gh, git fetch, or GitHub URLs." in prompt
+
+
 def test_agentic_workspace_prompt_references_constraints_file_when_strategy_is_attached_file(
     tmp_path: Path,
 ) -> None:
