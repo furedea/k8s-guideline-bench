@@ -57,11 +57,16 @@ must
 must not
 should
 should not
+Do not
+Don't
+Avoid
 required
 recommended
 preferred
 deprecated
 ```
+
+`may`, `MAY`, `optional`, `can` だけを根拠にした文は `main_sentence` にしません．これらは「満たすべき制約」ではなく，許可，任意性，可能性の説明になりやすいためです．一方で，同じ文に `must`, `should`, `Do not`, `Avoid` などの制約 signal がある場合は候補に残します．
 
 1 つの `main_sentence` から，原則として 1 つ以上の atomic constraint を作ります．
 
@@ -149,6 +154,52 @@ task for s8:
 ```
 
 `s1` は冒頭説明なので全 task に共有します．一方，`s3`, `s4`, `s6`, `s7` は通常の補足文なので，複数 task で選ばれたら曖昧さとして検出します．
+
+ただし，この境界だけでは文脈不足になるケースがあります．そのため，次の 2 つは例外的に context candidate に追加します．
+
+1. 後続の箇条書きを導入する文
+2. 直前文を指す語を含む文
+
+### 後続の箇条書きを導入する文
+
+重要キーワードを含む文が `:` で終わり，その直後に箇条書きが続く場合，その箇条書きは同じ説明単位の一部として扱います．
+
+例：
+
+```text
+s1: API fields must follow these rules:
+s2: - Use lowerCamelCase.
+s3: - Avoid abbreviations.
+```
+
+この場合，`s1` だけでは「どの rules か」が分かりません．そのため，`s2` と `s3` を `s1` の `context_sentences` に出します．これは自動採用ではなく，LLM が必要な文だけを選ぶ候補です．
+
+### 直前文を指す語を含む文
+
+文が `This`, `It`, `Instead` などで始まる場合や，文中に `this`, `it`, `such` などの指示語がある場合，その文だけでは対象が分からないことがあります．この場合，直前の重要キーワード文も `context_sentences` に出します．
+
+例：
+
+```text
+s1: Conditions should be included as a top level element in status.
+s2: It should not be embedded under spec.
+```
+
+`s2` の `It` は `Conditions` を指すため，`s1` を候補に出します．ただし，これも自動採用ではありません．LLM が `original` の理解に必要だと判断した場合だけ選びます．
+
+現在の対象語は次の通りです．
+
+```text
+文頭：
+It, They, This, That, These, Those, Such,
+Instead, Otherwise, Therefore, However, Thus, Hence, Consequently, Accordingly,
+As such, In that case, For this reason
+
+文中：
+it, its, itself, they, them, their, this, that, these, those, such
+```
+
+この規則は完璧な参照解決ではありません．目的は，明らかに文脈不足になりやすい文に対して，LLM が選べる候補を機械的に増やすことです．
 
 ## LLM に渡すもの
 
@@ -263,10 +314,11 @@ OPTIONAL
 ただし，`may` 系をすべて無視するわけではありません．次のような場合は別扱いにします．
 
 - 同じ main sentence に `MUST` や `should` などの強い signal がある
-- `may not` という phrase 自体の使い方を規定している
-- permission ではなく，禁止や wording rule として客観的に判定できる
+- `may` 系を含むが，主たる signal は `Do not`, `Avoid`, `must`, `should` などである
 
-この分類は，review sheet に余計な列を増やすためではなく，内部で候補を落とした理由を説明できるようにするために持ちます．
+`no ... may be defined` や `use "may"` のような特殊表現を細かく拾うための独自規則は，現時点では入れません．得られる候補が少ない一方で，抽出ロジックが複雑になりすぎるためです．必要になったら，人間レビューで落ちた実例を見てから追加します．
+
+内部では，候補から落ちた理由を `permissive_only`, `example_sentence`, `http_status_code_child` などとして audit に残します．review sheet に分類列を増やすためではなく，「なぜ候補から外れたか」を後で確認するためです．
 
 ## `beyond_syntax` の扱い
 
@@ -308,24 +360,36 @@ beyond_syntax = true:
 3. 重要キーワードを含む文を `main_sentence` とする
 4. block 冒頭の説明文を `shared_context_sentences` とする
 5. 隣の `main_sentence` を境界に `context_sentences` を作る
-6. LLM に context sentence ID だけを選ばせる
-7. 選択結果を機械的に検査する
-8. conflict があれば該当 task だけ再判定する
-9. 選ばれた原文を元の順序で結合して `original` を作る
-10. `original` から atomic constraint text を作る
-11. 人間が review sheet で確認する
+6. `:` で箇条書きを導入する文には，後続の箇条書きを候補として足す
+7. 指示語や接続語で文脈不足になりやすい文には，直前の重要キーワード文を候補として足す
+8. LLM に context sentence ID だけを選ばせる
+9. 選択結果を機械的に検査する
+10. conflict があれば該当 task だけ再判定する
+11. 選ばれた原文を元の順序で結合して `original` を作る
+12. `original` から atomic constraint text を作る
+13. 人間が review sheet で確認する
 
 この設計では，LLM は文脈選択と constraint text の整理に使います．一方で，`original` の本文そのものは必ず source document から機械的に作ります．
 
+## 生成物の置き場所
+
+現状の CLI は，機械抽出結果を `docs/mechanical/api-conventions/` に，LLM 補助の選択結果を `docs/llm/api-conventions/` に出します．ただし，これらは設計文書ではなく，再生成可能な研究成果物です．
+
+長期的には，生成物は `artifacts/constraint-extraction/` や `generated/constraint-extraction/` のような `docs/` 外のディレクトリに移す方が分かりやすいです．一方で，今すぐ既定出力先を変えると，既存のコマンド，README，過去成果物，テストの参照をまとめて変更する必要があります．そのため，この見直しでは出力先は変えず，`docs/` 内で設計メモと生成物を明確に区別します．
+
+古い 73 constraint pass の説明資料は `docs/archive/api-conventions/` に退避します．設計判断の現行参照先はこのファイルです．
+
 ## 実行手順
 
-まず，Markdown から `main_sentence` と候補文を機械的に作ります．既存の結果を残したい場合は，先に `sentence_selection_tasks.json` と `sentence_selection_audit.json` を `.old` などへ移動します．
+まず，Markdown から `main_sentence` と候補文を機械的に作ります．既存の結果を残したい場合は，先に `sentence_selection_tasks.json` と `sentence_selection_audit.json` を `.old` などへ移動します．抽出ロジックを変えた場合も，同じファイル名で上書きされるため，前回結果を比較したいなら先に退避します．
 
 ```bash
 uv run python src/constraint_extraction/main.py sentence-selection-tasks
 ```
 
 次に，LLM に context sentence ID だけを選ばせます．この段階では LLM に原文を書かせません．出力先の `sentence_context_selection.json` には，選ばれた ID と，その ID から機械的に復元した `original` と，重複選択の conflict が保存されます．
+
+`sentence_context_selection.json` は，正常で再利用可能な結果が既にある場合は skip します．抽出ロジックや task の中身を変えた後に完全にやり直したい場合は，古いファイルを `.old` に移動してから実行します．
 
 Codex を one-shot で使う例：
 

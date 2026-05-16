@@ -29,7 +29,7 @@
 
 | # | 段階 | ディレクトリ | CLI | 主な入出力 |
 | --- | --- | --- | --- | --- |
-| 1 | 制約抽出 | `src/constraint_extraction/` | `uv run python src/constraint_extraction/main.py {sentence-selection-tasks,review-sheet}` | ガイドライン原文 → Atomic Constraints（JSON） |
+| 1 | 制約抽出 | `src/constraint_extraction/` | `uv run python src/constraint_extraction/main.py {sentence-selection-tasks,sentence-context-selection,review-sheet}` | ガイドライン原文 → Atomic Constraints（JSON/CSV） |
 | 2 | データセット構築 | `src/dataset_construction/` | `uv run python src/dataset_construction/build_dataset.py --spec config/dataset_spec.json` | Kubernetes リポジトリ + GitHub PR metadata → `datasets/<pr_number>/` |
 | 3 | Agent 実行 | `src/agent_execution/` | `uv run python src/agent_execution/run_agent.py --spec config/experiment_spec_pilot.json` | `base/` + 規約 → `predicted_patch.diff` |
 | 4 | LLM-as-a-Judge | `src/llm_judgment/` | `uv run python src/llm_judgment/run_judgment.py --spec config/experiment_spec_pilot.json` | `predicted_patch.diff` + 規約 → `judgments.json` + 集計 |
@@ -391,16 +391,13 @@ Agent の標準出力は diff と見なさない．Agent が container 内の wo
 │   ├── dataset_spec.json
 │   ├── experiment_spec_pilot.json
 │   └── experiment_spec_full.json
-├── docs/                                # Provenance 別の規約原文・中間成果物
+├── docs/                                # Source documents, design notes, and archived research notes
 │   ├── source/api-conventions.md
-│   ├── mechanical/api-conventions/keyword_normative_rules.json
-│   ├── llm/api-conventions/normative_constraints.json
-│   ├── llm/api-conventions/normative_interpretations.json
-│   ├── llm/api-conventions/normative_review_notes.md
-│   ├── llm/api-conventions/atomic_constraints.json
-│   ├── llm/api-conventions/atomic_constraints_report.md
-│   ├── llm/api-conventions/atomic_selection_guide.md
+│   ├── llm/api-conventions/atomic_constraints_revision_notes.md
+│   ├── mechanical/api-conventions/*.json # Generated mechanical extraction artifacts
+│   ├── llm/api-conventions/*.json        # Generated LLM-assisted extraction artifacts
 │   ├── human/api-conventions/shigyos_atomic_constraints.csv
+│   ├── archive/api-conventions/*.md      # Archived notes from the old 73-constraint pass
 │   └── logs/audit/<YYYY-MM-DD>.jsonl    # constraint extraction の audit log
 ├── constraints/                          # 実験実行用 catalog
 │   ├── api_conventions_atomic_constraints_73.json
