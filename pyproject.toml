@@ -64,6 +64,7 @@ known_first_party = [
   "run_benchmark",
   "run_gold_scope",
   "sentence_context_selection",
+  "sentence_interpretation",
   "verification",
 ]
 
