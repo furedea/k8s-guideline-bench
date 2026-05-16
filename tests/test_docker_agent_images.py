@@ -68,6 +68,7 @@ def test_mini_swe_agent_wrapper_dependencies_are_provided_by_image() -> None:
     assert "MINI_SWE_AGENT_PYTHON" in wrapper_text
     assert "/opt/mini-swe-agent/bin/python" in wrapper_text
     assert "MINI_SWE_AGENT_CONFIG_PATH" in wrapper_text
+    assert "contextlib.redirect_stdout(sys.stderr)" in wrapper_text
     assert "from minisweagent.config import builtin_config_dir" in wrapper_text
     assert "MINI_RUNTIME_CONFIG_PATH" in wrapper_text
     assert "yaml.safe_load" in wrapper_text
