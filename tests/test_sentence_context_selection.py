@@ -260,7 +260,6 @@ def test_load_and_save_sentence_context_selection_report(tmp_path: Path) -> None
 def test_validate_existing_report_accepts_complete_report_with_retry_history() -> None:
     tasks = _tasks()
     report = sentence_context_selection.SentenceContextSelectionReport(
-        task_fingerprint=sentence_context_selection.fingerprint_sentence_selection_tasks(tasks),
         selections=tuple(
             sentence_context_selection.SentenceContextSelection(
                 task_id=task.id,
@@ -285,31 +284,9 @@ def test_validate_existing_report_accepts_complete_report_with_retry_history() -
     assert validation.reason == "complete"
 
 
-def test_validate_existing_report_rejects_report_from_different_task_content() -> None:
-    tasks = _tasks()
-    report = sentence_context_selection.SentenceContextSelectionReport(
-        task_fingerprint="old-task-content",
-        selections=tuple(
-            sentence_context_selection.SentenceContextSelection(
-                task_id=task.id,
-                selected_context_sentence_ids=(),
-                original=task.main_sentence.text,
-            )
-            for task in tasks
-        ),
-        conflicts=(),
-    )
-
-    validation = sentence_context_selection.validate_existing_report(report, tasks)
-
-    assert validation.is_reusable is False
-    assert validation.reason == "task_fingerprint_mismatch"
-
-
 def test_validate_existing_report_rejects_incomplete_or_invalid_report() -> None:
     tasks = _tasks()
     missing_selection_report = sentence_context_selection.SentenceContextSelectionReport(
-        task_fingerprint=sentence_context_selection.fingerprint_sentence_selection_tasks(tasks),
         selections=(
             sentence_context_selection.SentenceContextSelection(
                 task_id=tasks[0].id,
@@ -320,7 +297,6 @@ def test_validate_existing_report_rejects_incomplete_or_invalid_report() -> None
         conflicts=(),
     )
     invalid_report = sentence_context_selection.SentenceContextSelectionReport(
-        task_fingerprint=sentence_context_selection.fingerprint_sentence_selection_tasks(tasks),
         selections=tuple(
             sentence_context_selection.SentenceContextSelection(
                 task_id=task.id,

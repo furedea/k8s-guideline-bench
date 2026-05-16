@@ -116,7 +116,6 @@ Optionality affects API compatibility. Fields must be either optional or require
         encoding="utf-8",
     )
     existing_report = main.sentence_context_selection.SentenceContextSelectionReport(
-        task_fingerprint=main.sentence_context_selection.fingerprint_sentence_selection_tasks(tasks),
         selections=(
             main.sentence_context_selection.SentenceContextSelection(
                 task_id=tasks[0].id,

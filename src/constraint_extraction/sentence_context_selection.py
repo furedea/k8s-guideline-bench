@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import subprocess
@@ -42,7 +41,6 @@ class SelectionRetryAttempt(base.FrozenModel):
 class SentenceContextSelectionReport(base.FrozenModel):
     """LLM sentence context selection report."""
 
-    task_fingerprint: str = ""
     selections: tuple[SentenceContextSelection, ...]
     conflicts: tuple[normative_audit.ContextSelectionConflict, ...]
     invalid_context_selections: tuple[InvalidContextSelection, ...] = ()
@@ -102,7 +100,6 @@ def load_context_selection_report(path: Path) -> SentenceContextSelectionReport:
         raise TypeError("Sentence context selection report must contain a JSON object.")
     report_document = cast(dict[str, object], document)
     return SentenceContextSelectionReport(
-        task_fingerprint=str(report_document.get("task_fingerprint", "")),
         selections=tuple(
             _context_selection_from_json(selection) for selection in _list_field(report_document, "selections")
         ),
@@ -124,8 +121,6 @@ def validate_existing_report(
     tasks: tuple[normative_audit.SentenceSelectionTask, ...],
 ) -> ExistingReportValidation:
     """Check whether an existing report fully covers the current task set."""
-    if report.task_fingerprint != fingerprint_sentence_selection_tasks(tasks):
-        return ExistingReportValidation(is_reusable=False, reason="task_fingerprint_mismatch")
     expected_task_ids = {task.id for task in tasks}
     selection_task_ids = {selection.task_id for selection in report.selections}
     if report.conflicts:
@@ -139,13 +134,6 @@ def validate_existing_report(
     if extra_task_ids:
         return ExistingReportValidation(is_reusable=False, reason="unknown_task_selections")
     return ExistingReportValidation(is_reusable=True, reason="complete")
-
-
-def fingerprint_sentence_selection_tasks(tasks: tuple[normative_audit.SentenceSelectionTask, ...]) -> str:
-    """Return a stable fingerprint for sentence selection task content."""
-    payload = [task.model_dump(mode="json") for task in tasks]
-    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def select_sentence_contexts_with_codex(
@@ -213,7 +201,6 @@ def select_sentence_contexts_with_codex(
         for task in tasks
     )
     return SentenceContextSelectionReport(
-        task_fingerprint=fingerprint_sentence_selection_tasks(tasks),
         selections=selections,
         conflicts=conflicts,
         invalid_context_selections=invalid_context_selections,
