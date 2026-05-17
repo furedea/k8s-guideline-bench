@@ -52,6 +52,11 @@ def test_select_related_rules_matches_only_high_confidence_linter_patterns() -> 
             original="Object metadata includes creationTimestamp and deletionTimestamp as RFC 3339 date-time strings.",
             constraint="Objects should include metadata with creationTimestamp and deletionTimestamp date-time fields.",
         ),
+        kube_api_linter_relation.KubeApiLinterRelationTask(
+            id="ssa_without_conditions",
+            original="Defaulting may add values to arrays with patchStrategy merge.",
+            constraint="Defaulting should only add values to arrays with +listType=map or patchStrategy merge.",
+        ),
     )
 
     report = kube_api_linter_relation.select_related_rules(tasks)
@@ -62,6 +67,7 @@ def test_select_related_rules_matches_only_high_confidence_linter_patterns() -> 
         ("semantic_condition", ()),
         ("disabled_max_length", ("maxlength (disabled)",)),
         ("metadata_timestamp_reference", ()),
+        ("ssa_without_conditions", ("ssatags",)),
     )
 
 

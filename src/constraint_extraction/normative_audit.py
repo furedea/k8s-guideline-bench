@@ -35,6 +35,10 @@ _PROHIBITION_RE = re.compile(
 _DEPRECATION_RE = re.compile(r"\bdeprecated\b")
 _PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")
 _EXAMPLE_SENTENCE_RE = re.compile(r"^Examples?:")
+_NAVIGATION_SENTENCE_RE = re.compile(
+    r"\b(?:following|next)\s+sections?\s+(?:illustrate|describe|show|provide)\b",
+    re.IGNORECASE,
+)
 _HTTP_STATUS_CODE_LABEL_RE = re.compile(r"^`?\d{3}\s+Status[A-Za-z0-9]+`?$")
 _REFERENTIAL_CONTEXT_RE = re.compile(
     r"^(?:"
@@ -656,7 +660,7 @@ def _source_sentences(block_text: str) -> tuple[SourceSentence, ...]:
             SourceSentence(
                 id=f"s{index}",
                 text=sentence,
-                has_keyword=_is_included_signal(signal_tags) and not _is_example_sentence(sentence),
+                has_keyword=_is_promotable_sentence(sentence, signal_tags),
                 signal_tags=signal_tags,
             ),
         )
@@ -707,18 +711,36 @@ def _leading_context_sentences(blocks: tuple[SourceBlock, ...], block_index: int
     block = blocks[block_index]
     if block.kind != CandidateKind.BULLET or block_index == 0:
         return ()
+    ancestor_context = _ancestor_context_sentence(block)
     lead_in_block = _preceding_bullet_lead_in_block(blocks, block_index)
     if lead_in_block is None:
-        return ()
+        return ancestor_context
     lead_in = _last_sentence(_normalize_block_text(lead_in_block.text))
     if not lead_in:
+        return ancestor_context
+    return _dedupe_source_sentences(
+        [
+            *ancestor_context,
+            SourceSentence(
+                id="s0",
+                text=lead_in,
+                has_keyword=False,
+                signal_tags=_sentence_signal_tags(lead_in),
+            ),
+        ],
+    )
+
+
+def _ancestor_context_sentence(block: SourceBlock) -> tuple[SourceSentence, ...]:
+    if not block.ancestor_bullets:
         return ()
+    ancestor_text = " ".join(_normalize_block_text(text) for text in block.ancestor_bullets)
     return (
         SourceSentence(
             id="s0",
-            text=lead_in,
+            text=ancestor_text,
             has_keyword=False,
-            signal_tags=_sentence_signal_tags(lead_in),
+            signal_tags=_sentence_signal_tags(ancestor_text),
         ),
     )
 
@@ -791,6 +813,8 @@ def _sentence_selection_exclusion_reason(
         return "http_status_code_child"
     if _is_example_sentence(sentence.text):
         return "example_sentence"
+    if _is_navigation_sentence(sentence.text):
+        return "navigation_sentence"
     return "permissive_only"
 
 
@@ -814,9 +838,18 @@ def _is_included_signal(signal_tags: tuple[SignalTag, ...]) -> bool:
     return any(tag != SignalTag.PERMISSIVE for tag in signal_tags)
 
 
+def _is_promotable_sentence(text: str, signal_tags: tuple[SignalTag, ...]) -> bool:
+    return _is_included_signal(signal_tags) and not _is_example_sentence(text) and not _is_navigation_sentence(text)
+
+
 def _is_example_sentence(text: str) -> bool:
     """Return whether a sentence is an example, not a rule statement."""
     return _EXAMPLE_SENTENCE_RE.search(text) is not None
+
+
+def _is_navigation_sentence(text: str) -> bool:
+    """Return whether a sentence points to examples rather than stating a rule."""
+    return _NAVIGATION_SENTENCE_RE.search(text) is not None
 
 
 def _has_http_status_code_ancestor(block: SourceBlock) -> bool:

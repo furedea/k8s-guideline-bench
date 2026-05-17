@@ -146,7 +146,7 @@ def _matches_no_timestamp_rule(text: str) -> bool:
 
 
 def _matches_conditions_rule(text: str) -> bool:
-    return "metav1.condition" in text or "patchstrategy" in text or "patchmergekey" in text
+    return "metav1.condition" in text
 
 
 def _matches_ssa_tags_rule(text: str) -> bool:

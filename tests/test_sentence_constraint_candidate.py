@@ -121,6 +121,33 @@ def test_select_constraint_candidates_with_codex_retries_missing_task_candidates
     assert report.retry_attempts[0].task_ids == (tasks[1].id,)
 
 
+def test_select_constraint_candidates_with_codex_normalizes_ascii_sentence_punctuation(
+    mocker: MockerFixture,
+) -> None:
+    tasks = _candidate_tasks()[:1]
+    mocker.patch(
+        "sentence_constraint_candidate.run_codex_constraint_candidates",
+        return_value=json.dumps(
+            {
+                "tasks": [
+                    {
+                        "task_id": tasks[0].id,
+                        "constraint": (
+                            "Fields must be either optional or required\uff0cand this schema must be stable\uff0e"
+                        ),
+                    },
+                ],
+            },
+        ),
+    )
+
+    report = sentence_constraint_candidate.select_constraint_candidates_with_codex(tasks)
+
+    assert report.candidates[0].constraint == (
+        "Fields must be either optional or required, and this schema must be stable."
+    )
+
+
 def test_run_codex_constraint_candidates_uses_schema_and_last_message(mocker: MockerFixture) -> None:
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         output_path = Path(command[command.index("--output-last-message") + 1])
