@@ -10,35 +10,35 @@ from pytest_mock import MockerFixture
 def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: MockerFixture) -> None:
     calls: list[str] = []
     sentence_selection = mocker.patch(
-        "main._run_sentence_selection_tasks",
-        side_effect=lambda _: calls.append("sentence-selection-tasks"),
+        "main._run_normative_sentence_selection",
+        side_effect=lambda _: calls.append("normative-sentence-selection"),
     )
     sentence_context_selection = mocker.patch(
         "main._run_sentence_context_selection",
         side_effect=lambda _: calls.append("sentence-context-selection"),
     )
     sentence_constraint_candidates = mocker.patch(
-        "main._run_sentence_constraint_candidates",
-        side_effect=lambda _: calls.append("sentence-constraint-candidates"),
+        "main._run_constraint_drafts",
+        side_effect=lambda _: calls.append("constraint-drafts"),
     )
     sentence_interpretations = mocker.patch(
-        "main._run_sentence_interpretations",
-        side_effect=lambda _: calls.append("sentence-interpretations"),
+        "main._run_constraint_interpretations",
+        side_effect=lambda _: calls.append("constraint-interpretations"),
     )
     kube_api_linter_relations = mocker.patch(
-        "main._run_sentence_kube_api_linter_relations",
-        side_effect=lambda _: calls.append("sentence-kube-api-linter-relations"),
+        "main._run_kube_api_linter_hints",
+        side_effect=lambda _: calls.append("kube-api-linter-hints"),
     )
     review_sheet = mocker.patch("main._run_review_sheet", side_effect=lambda _: calls.append("review-sheet"))
 
     main.main(())
 
     assert calls == [
-        "sentence-selection-tasks",
+        "normative-sentence-selection",
         "sentence-context-selection",
-        "sentence-constraint-candidates",
-        "sentence-interpretations",
-        "sentence-kube-api-linter-relations",
+        "constraint-drafts",
+        "constraint-interpretations",
+        "kube-api-linter-hints",
         "review-sheet",
     ]
     sentence_selection.assert_called_once()
@@ -65,7 +65,7 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_constraint_candidates.call_args.args[0].batch_size == 25
     assert sentence_constraint_candidates.call_args.args[0].stream_codex_output is False
     sentence_interpretations.assert_called_once()
-    assert sentence_interpretations.call_args.args[0].constraint_candidates_path is None
+    assert sentence_interpretations.call_args.args[0].constraint_drafts_path is None
     assert sentence_interpretations.call_args.args[0].output_path is None
     assert sentence_interpretations.call_args.args[0].codex_command == "codex"
     assert sentence_interpretations.call_args.args[0].model is None
@@ -74,16 +74,16 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_interpretations.call_args.args[0].batch_size == 25
     assert sentence_interpretations.call_args.args[0].stream_codex_output is False
     kube_api_linter_relations.assert_called_once()
-    assert kube_api_linter_relations.call_args.args[0].constraint_candidates_path is None
+    assert kube_api_linter_relations.call_args.args[0].constraint_drafts_path is None
     assert kube_api_linter_relations.call_args.args[0].output_path is None
     review_sheet.assert_called_once()
-    assert review_sheet.call_args.args[0].constraint_candidates_path is None
-    assert review_sheet.call_args.args[0].interpretations_path is None
-    assert review_sheet.call_args.args[0].kube_api_linter_relations_path is None
+    assert review_sheet.call_args.args[0].constraint_drafts_path is None
+    assert review_sheet.call_args.args[0].constraint_interpretations_path is None
+    assert review_sheet.call_args.args[0].kube_api_linter_hints_path is None
     assert review_sheet.call_args.args[0].output_path is None
 
 
-def test_run_sentence_selection_tasks_writes_json_from_source_markdown(tmp_path: Path) -> None:
+def test_run_normative_sentence_selection_writes_json_from_source_markdown(tmp_path: Path) -> None:
     conventions_path = tmp_path / "api-conventions.md"
     conventions_path.write_text(
         """
@@ -96,7 +96,7 @@ Objects may report multiple conditions. This collection should be treated as a m
     output_path = tmp_path / "tasks.json"
     audit_output_path = tmp_path / "audit.json"
 
-    main._run_sentence_selection_tasks(
+    main._run_normative_sentence_selection(
         argparse.Namespace(
             conventions_path=conventions_path,
             output_path=output_path,
@@ -176,7 +176,7 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert "[sentence-context-selection] retry_attempts=0" in output
 
 
-def test_run_sentence_constraint_candidates_writes_llm_candidates(
+def test_run_constraint_drafts_writes_llm_drafts(
     tmp_path: Path,
     mocker: MockerFixture,
     capsys: CaptureFixture[str],
@@ -221,7 +221,7 @@ Optionality affects API compatibility. Fields must be either optional or require
         ),
     )
 
-    main._run_sentence_constraint_candidates(
+    main._run_constraint_drafts(
         argparse.Namespace(
             tasks_path=tasks_path,
             context_selection_path=context_selection_path,
@@ -245,23 +245,23 @@ Optionality affects API compatibility. Fields must be either optional or require
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["candidates"][0]["constraint"] == "Fields must be either optional or required."
     output = capsys.readouterr().out
-    assert "[sentence-constraint-candidates] loading tasks from" in output
-    assert "[sentence-constraint-candidates] loading context selections from" in output
+    assert "[constraint-drafts] loading tasks from" in output
+    assert "[constraint-drafts] loading context selections from" in output
     assert (
-        "[sentence-constraint-candidates] running codex for 1 tasks "
+        "[constraint-drafts] running codex for 1 tasks "
         "(model=gpt-5.2, timeout=120s, max_retries=2, batch_size=10, stream_codex_output=True)" in output
     )
-    assert "[sentence-constraint-candidates] writing report to" in output
-    assert "[sentence-constraint-candidates] candidates=1" in output
-    assert "[sentence-constraint-candidates] retry_attempts=0" in output
+    assert "[constraint-drafts] writing report to" in output
+    assert "[constraint-drafts] drafts=1" in output
+    assert "[constraint-drafts] retry_attempts=0" in output
 
 
-def test_run_sentence_interpretations_writes_llm_interpretations(
+def test_run_constraint_interpretations_writes_llm_interpretations(
     tmp_path: Path,
     mocker: MockerFixture,
     capsys: CaptureFixture[str],
 ) -> None:
-    constraint_candidates_path = tmp_path / "constraint-candidates.json"
+    constraint_drafts_path = tmp_path / "constraint-drafts.json"
     output_path = tmp_path / "interpretations.json"
     document = """
 ## Section
@@ -281,7 +281,7 @@ Optionality affects API compatibility. Fields must be either optional or require
             ),
         ),
     )
-    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_candidates_path)
+    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_drafts_path)
     select_interpretations = mocker.patch(
         "main.sentence_interpretation.select_interpretations_with_codex",
         return_value=main.sentence_interpretation.SentenceInterpretationReport(
@@ -298,9 +298,9 @@ Optionality affects API compatibility. Fields must be either optional or require
         ),
     )
 
-    main._run_sentence_interpretations(
+    main._run_constraint_interpretations(
         argparse.Namespace(
-            constraint_candidates_path=constraint_candidates_path,
+            constraint_drafts_path=constraint_drafts_path,
             output_path=output_path,
             codex_command="codex",
             model="gpt-5.2",
@@ -321,22 +321,22 @@ Optionality affects API compatibility. Fields must be either optional or require
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["interpretations"][0]["interpretation"] == ("Fields must be either optional or required.")
     output = capsys.readouterr().out
-    assert "[sentence-interpretations] loading constraint candidates from" in output
+    assert "[constraint-interpretations] loading constraint drafts from" in output
     assert (
-        "[sentence-interpretations] running codex for 1 tasks "
+        "[constraint-interpretations] running codex for 1 tasks "
         "(model=gpt-5.2, timeout=120s, max_retries=2, batch_size=10, stream_codex_output=True)" in output
     )
-    assert "[sentence-interpretations] writing report to" in output
-    assert "[sentence-interpretations] interpretations=1" in output
-    assert "[sentence-interpretations] retry_attempts=0" in output
+    assert "[constraint-interpretations] writing report to" in output
+    assert "[constraint-interpretations] interpretations=1" in output
+    assert "[constraint-interpretations] retry_attempts=0" in output
 
 
-def test_run_sentence_kube_api_linter_relations_writes_deterministic_hints(
+def test_run_kube_api_linter_hints_writes_deterministic_hints(
     tmp_path: Path,
     capsys: CaptureFixture[str],
 ) -> None:
-    constraint_candidates_path = tmp_path / "constraint-candidates.json"
-    output_path = tmp_path / "kube-api-linter-relations.json"
+    constraint_drafts_path = tmp_path / "constraint-drafts.json"
+    output_path = tmp_path / "kube-api-linter-hints.json"
     draft_report = main.sentence_constraint_candidate.SentenceConstraintCandidateReport(
         candidates=(
             main.sentence_constraint_candidate.SentenceConstraintCandidate(
@@ -349,11 +349,11 @@ def test_run_sentence_kube_api_linter_relations_writes_deterministic_hints(
             ),
         ),
     )
-    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_candidates_path)
+    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_drafts_path)
 
-    main._run_sentence_kube_api_linter_relations(
+    main._run_kube_api_linter_hints(
         argparse.Namespace(
-            constraint_candidates_path=constraint_candidates_path,
+            constraint_drafts_path=constraint_drafts_path,
             output_path=output_path,
         ),
     )
@@ -361,11 +361,11 @@ def test_run_sentence_kube_api_linter_relations_writes_deterministic_hints(
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["relations"] == [{"task_id": "block_0001_s1", "rules": ["optionalorrequired"]}]
     output = capsys.readouterr().out
-    assert "[sentence-kube-api-linter-relations] loading constraint candidates from" in output
-    assert "[sentence-kube-api-linter-relations] selecting deterministic relations for 1 tasks" in output
-    assert "[sentence-kube-api-linter-relations] writing report to" in output
-    assert "[sentence-kube-api-linter-relations] relations=1" in output
-    assert "[sentence-kube-api-linter-relations] related=1/1" in output
+    assert "[kube-api-linter-hints] loading constraint drafts from" in output
+    assert "[kube-api-linter-hints] selecting deterministic hints for 1 tasks" in output
+    assert "[kube-api-linter-hints] writing report to" in output
+    assert "[kube-api-linter-hints] hints=1" in output
+    assert "[kube-api-linter-hints] related=1/1" in output
 
 
 def test_run_sentence_context_selection_skips_reusable_existing_report(

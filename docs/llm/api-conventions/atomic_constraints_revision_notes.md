@@ -414,9 +414,21 @@ beyond_syntax = true:
 
 ## 生成物の置き場所
 
-現状の CLI は，機械抽出結果を `docs/mechanical/api-conventions/` に，LLM 補助の選択結果を `docs/llm/api-conventions/` に出します．ただし，これらは設計文書ではなく，再生成可能な研究成果物です．
+生成物は `docs/` ではなく `artifacts/constraint-extraction/api-conventions/` に出します．`docs/` は設計メモや人間向け説明に限定し，再生成可能な JSON/CSV は artifacts として分離します．
 
-長期的には，生成物は `artifacts/constraint-extraction/` や `generated/constraint-extraction/` のような `docs/` 外のディレクトリに移す方が分かりやすいです．一方で，今すぐ既定出力先を変えると，既存のコマンド，README，過去成果物，テストの参照をまとめて変更する必要があります．そのため，この見直しでは出力先は変えず，`docs/` 内で設計メモと生成物を明確に区別します．
+```text
+artifacts/constraint-extraction/api-conventions/
+  mechanical/
+    normative_sentence_selection.json
+    normative_sentence_selection_audit.json
+  llm/
+    sentence_context_selection.json
+    constraint_drafts.json
+    constraint_interpretations.json
+    kube_api_linter_hints.json
+  human/
+    atomic_constraint_review_sheet.csv
+```
 
 古い 73 constraint pass の説明資料は `docs/archive/api-conventions/` に退避します．設計判断の現行参照先はこのファイルです．
 
@@ -424,29 +436,34 @@ beyond_syntax = true:
 
 通常はサブコマンドを指定せずに実行します．この場合，次の順で標準工程が動きます．
 
-1. `sentence-selection-tasks`
+1. `normative-sentence-selection`
 2. `sentence-context-selection`
-3. `review-sheet`
+3. `constraint-drafts`
+4. `constraint-interpretations`
+5. `kube-api-linter-hints`
+6. `review-sheet`
 
 ```bash
 uv run python src/constraint_extraction/main.py
 ```
 
-既存の結果を残したい場合は，先に生成物を `.old` などへ移動します．抽出ロジックを変えた場合も，同じファイル名で上書きされるため，前回結果を比較したいなら先に退避します．
+既存の結果を消して完全にやり直す場合は，先に生成物を削除します．
 
 ```bash
-mv docs/mechanical/api-conventions/sentence_selection_tasks.json \
-  docs/mechanical/api-conventions/sentence_selection_tasks.json.old
-mv docs/mechanical/api-conventions/sentence_selection_audit.json \
-  docs/mechanical/api-conventions/sentence_selection_audit.json.old
-mv docs/llm/api-conventions/sentence_context_selection.json \
-  docs/llm/api-conventions/sentence_context_selection.json.old
+rm -f \
+  artifacts/constraint-extraction/api-conventions/mechanical/normative_sentence_selection.json \
+  artifacts/constraint-extraction/api-conventions/mechanical/normative_sentence_selection_audit.json \
+  artifacts/constraint-extraction/api-conventions/llm/sentence_context_selection.json \
+  artifacts/constraint-extraction/api-conventions/llm/constraint_drafts.json \
+  artifacts/constraint-extraction/api-conventions/llm/constraint_interpretations.json \
+  artifacts/constraint-extraction/api-conventions/llm/kube_api_linter_hints.json \
+  artifacts/constraint-extraction/api-conventions/human/atomic_constraint_review_sheet.csv
 ```
 
 必要な工程だけを個別に動かす場合は，サブコマンドを指定します．まず，Markdown から `main_sentence` と候補文を機械的に作ります．
 
 ```bash
-uv run python src/constraint_extraction/main.py sentence-selection-tasks
+uv run python src/constraint_extraction/main.py normative-sentence-selection
 ```
 
 次に，LLM に context sentence ID だけを選ばせます．この段階では LLM に原文を書かせません．出力先の `sentence_context_selection.json` には，選ばれた ID と，その ID から機械的に復元した `original` と，重複選択の conflict が保存されます．
@@ -469,6 +486,30 @@ uv run python src/constraint_extraction/main.py sentence-context-selection \
   --timeout-seconds 1800 \
   --max-retries 3 \
   --batch-size 25
+```
+
+次に，選ばれた `original` から draft constraint を作ります．
+
+```bash
+uv run python src/constraint_extraction/main.py constraint-drafts
+```
+
+次に，draft constraint の人間レビュー用 interpretation を作ります．
+
+```bash
+uv run python src/constraint_extraction/main.py constraint-interpretations
+```
+
+次に，kube-api-linter rule に機械的に高信頼で対応づけられる候補だけを review hint として付与します．
+
+```bash
+uv run python src/constraint_extraction/main.py kube-api-linter-hints
+```
+
+最後に，人間レビュー用 CSV を作ります．
+
+```bash
+uv run python src/constraint_extraction/main.py review-sheet
 ```
 
 Codex が存在しない sentence ID を選んだ場合や，同じ通常 context sentence を複数の `main_sentence` に選んだ場合は，該当 task だけを自動で再実行します．`--max-retries` 回連続で直らない場合は停止し，どの task がどの理由で失敗したかを表示します．

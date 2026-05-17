@@ -394,11 +394,13 @@ Agent の標準出力は diff と見なさない．Agent が container 内の wo
 ├── docs/                                # Source documents, design notes, and archived research notes
 │   ├── source/api-conventions.md
 │   ├── llm/api-conventions/atomic_constraints_revision_notes.md
-│   ├── mechanical/api-conventions/*.json # Generated mechanical extraction artifacts
-│   ├── llm/api-conventions/*.json        # Generated LLM-assisted extraction artifacts
-│   ├── human/api-conventions/atomic_constraint_review_sheet.csv
 │   ├── archive/api-conventions/*.md      # Archived notes from the old 73-constraint pass
 │   └── logs/audit/<YYYY-MM-DD>.jsonl    # constraint extraction の audit log
+├── artifacts/                           # Regenerable experiment and extraction artifacts
+│   └── constraint-extraction/api-conventions/
+│       ├── mechanical/*.json            # Mechanical sentence selection artifacts
+│       ├── llm/*.json                   # LLM-assisted extraction artifacts
+│       └── human/*.csv                  # Human review sheets
 ├── constraints/                          # 実験実行用 catalog
 │   ├── api_conventions_atomic_constraints_73.json
 │   └── api_conventions_normative_constraints_223.json

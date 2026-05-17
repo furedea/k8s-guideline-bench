@@ -58,11 +58,11 @@ def test_build_review_row_initializes_human_review_columns() -> None:
 
 
 def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations(tmp_path: Path) -> None:
-    candidates_path = tmp_path / "sentence_constraint_candidates.json"
-    interpretations_path = tmp_path / "sentence_interpretations.json"
-    kube_api_linter_relations_path = tmp_path / "sentence_kube_api_linter_relations.json"
+    constraint_drafts_path = tmp_path / "constraint_drafts.json"
+    constraint_interpretations_path = tmp_path / "constraint_interpretations.json"
+    kube_api_linter_hints_path = tmp_path / "kube_api_linter_hints.json"
     output_path = tmp_path / "review.csv"
-    candidates_path.write_text(
+    constraint_drafts_path.write_text(
         json.dumps(
             {
                 "candidates": [
@@ -80,7 +80,7 @@ def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations
         ),
         encoding="utf-8",
     )
-    interpretations_path.write_text(
+    constraint_interpretations_path.write_text(
         json.dumps(
             {
                 "interpretations": [
@@ -98,7 +98,7 @@ def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations
         ),
         encoding="utf-8",
     )
-    kube_api_linter_relations_path.write_text(
+    kube_api_linter_hints_path.write_text(
         json.dumps(
             {
                 "relations": [
@@ -114,9 +114,9 @@ def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations
 
     main._run_review_sheet(
         main.argparse.Namespace(
-            constraint_candidates_path=candidates_path,
-            interpretations_path=interpretations_path,
-            kube_api_linter_relations_path=kube_api_linter_relations_path,
+            constraint_drafts_path=constraint_drafts_path,
+            constraint_interpretations_path=constraint_interpretations_path,
+            kube_api_linter_hints_path=kube_api_linter_hints_path,
             output_path=output_path,
         ),
     )

@@ -66,7 +66,7 @@ def test_select_related_rules_matches_only_high_confidence_linter_patterns() -> 
 
 
 def test_load_save_and_validate_relation_report(tmp_path: Path) -> None:
-    output_path = tmp_path / "sentence_kube_api_linter_relations.json"
+    output_path = tmp_path / "kube_api_linter_hints.json"
     tasks = (
         kube_api_linter_relation.KubeApiLinterRelationTask(
             id="block_0001_s1",
