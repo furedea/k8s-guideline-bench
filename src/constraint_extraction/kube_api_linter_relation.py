@@ -138,7 +138,11 @@ def _matches_optional_fields_rule(text: str) -> bool:
 
 
 def _matches_no_timestamp_rule(text: str) -> bool:
-    return ("timestamp" in text or "stamp" in text) and bool(re.search(r"\btime\b|\bdatetime\b", text))
+    return bool(
+        re.search(
+            r"\bmust not use [`']?stamp[`']?\b|\bdo not use [`']?stamp[`']?\b|\bshould not use [`']?stamp[`']?\b", text
+        ),
+    ) or bool(re.search(r"\bcalled \w*time\b", text) and re.search(r"\btimestamp\b|\bstamp\b", text))
 
 
 def _matches_conditions_rule(text: str) -> bool:

@@ -47,6 +47,11 @@ def test_select_related_rules_matches_only_high_confidence_linter_patterns() -> 
             original="Strings should have maximum lengths.",
             constraint="String fields should define a maximum length.",
         ),
+        kube_api_linter_relation.KubeApiLinterRelationTask(
+            id="metadata_timestamp_reference",
+            original="Object metadata includes creationTimestamp and deletionTimestamp as RFC 3339 date-time strings.",
+            constraint="Objects should include metadata with creationTimestamp and deletionTimestamp date-time fields.",
+        ),
     )
 
     report = kube_api_linter_relation.select_related_rules(tasks)
@@ -56,6 +61,7 @@ def test_select_related_rules_matches_only_high_confidence_linter_patterns() -> 
         ("optionality", ("optionalorrequired",)),
         ("semantic_condition", ()),
         ("disabled_max_length", ("maxlength (disabled)",)),
+        ("metadata_timestamp_reference", ()),
     )
 
 
