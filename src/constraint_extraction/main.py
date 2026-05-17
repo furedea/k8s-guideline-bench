@@ -9,6 +9,8 @@ Subcommands:
                       Generate atomic constraint candidates with Codex.
     sentence-interpretations
                       Generate source interpretations with Codex.
+    sentence-kube-api-linter-relations
+                      Generate kube-api-linter relation hints.
     review-sheet      Generate atomic constraint review sheet CSV.
 """
 
@@ -21,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 for _stage in ("constraint_extraction", "common", ""):
     sys.path.insert(0, str(ROOT / "src" / _stage))
 
+import kube_api_linter_relation  # noqa: E402
 import normative_audit  # noqa: E402
 import sentence_constraint_candidate  # noqa: E402
 import sentence_context_selection  # noqa: E402
@@ -33,6 +36,7 @@ REVIEW_SHEET_FIELDNAMES = [
     "Original",
     "Constraint",
     "Interpretation",
+    "Kube-API-Linter",
     "Atomic",
     "Beyond-Syntax",
     "Diff-Closed",
@@ -75,6 +79,12 @@ def main(argv: tuple[str, ...] | None = None) -> None:
         subparsers.add_parser(
             "sentence-interpretations",
             help="Generate source interpretations for selected originals.",
+        ),
+    )
+    _configure_sentence_kube_api_linter_relations_parser(
+        subparsers.add_parser(
+            "sentence-kube-api-linter-relations",
+            help="Generate kube-api-linter relation hints for draft constraints.",
         ),
     )
     arguments = parser.parse_args(argv)
@@ -134,11 +144,19 @@ def _run_default_constraint_pipeline() -> None:
             stream_codex_output=False,
         ),
     )
+    print("[constraint-extraction] running sentence-kube-api-linter-relations", flush=True)
+    _run_sentence_kube_api_linter_relations(
+        argparse.Namespace(
+            constraint_candidates_path=None,
+            output_path=None,
+        ),
+    )
     print("[constraint-extraction] running review-sheet", flush=True)
     _run_review_sheet(
         argparse.Namespace(
             constraint_candidates_path=None,
             interpretations_path=None,
+            kube_api_linter_relations_path=None,
             output_path=None,
         ),
     )
@@ -147,6 +165,7 @@ def _run_default_constraint_pipeline() -> None:
 def _configure_review_sheet_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--constraint-candidates-path", type=Path, default=None)
     _ = parser.add_argument("--interpretations-path", type=Path, default=None)
+    _ = parser.add_argument("--kube-api-linter-relations-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     parser.set_defaults(func=_run_review_sheet)
 
@@ -195,6 +214,12 @@ def _configure_sentence_interpretations_parser(parser: argparse.ArgumentParser) 
     parser.set_defaults(func=_run_sentence_interpretations)
 
 
+def _configure_sentence_kube_api_linter_relations_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--constraint-candidates-path", type=Path, default=None)
+    _ = parser.add_argument("--output-path", type=Path, default=None)
+    parser.set_defaults(func=_run_sentence_kube_api_linter_relations)
+
+
 def _run_review_sheet(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
     docs_dir = project_root / "docs"
@@ -203,6 +228,9 @@ def _run_review_sheet(arguments: argparse.Namespace) -> None:
     )
     interpretations_path = arguments.interpretations_path or (
         docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json"
+    )
+    kube_api_linter_relations_path = arguments.kube_api_linter_relations_path or (
+        docs_dir / "llm" / "api-conventions" / "sentence_kube_api_linter_relations.json"
     )
     output_path = arguments.output_path or (
         docs_dir / "human" / "api-conventions" / "atomic_constraint_review_sheet.csv"
@@ -216,15 +244,24 @@ def _run_review_sheet(arguments: argparse.Namespace) -> None:
         interpretation.task_id: interpretation.interpretation
         for interpretation in interpretation_report.interpretations
     }
+    print(f"[review-sheet] loading kube-api-linter relations from {kube_api_linter_relations_path}", flush=True)
+    relation_report = kube_api_linter_relation.load_relation_report(kube_api_linter_relations_path)
+    kube_api_linter_rules = {relation.task_id: relation.rules for relation in relation_report.relations}
     rows = [
-        _build_review_row(candidate, interpretation=interpretations.get(candidate.task_id, ""))
+        _build_review_row(
+            candidate,
+            interpretation=interpretations.get(candidate.task_id, ""),
+            kube_api_linter_rules=kube_api_linter_rules.get(candidate.task_id, ()),
+        )
         for candidate in candidate_report.candidates
     ]
     _write_csv(rows, output_path)
 
     filled = sum(1 for row in rows if row["Interpretation"])
+    related = sum(1 for row in rows if row["Kube-API-Linter"])
     print(f"[review-sheet] written rows={len(rows)} to {output_path}")
     print(f"[review-sheet] interpretations={filled}/{len(rows)}")
+    print(f"[review-sheet] kube_api_linter_relations={related}/{len(rows)}")
 
 
 def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
@@ -409,10 +446,50 @@ def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
     print(f"[sentence-interpretations] retry_attempts={len(report.retry_attempts)}")
 
 
+def _run_sentence_kube_api_linter_relations(arguments: argparse.Namespace) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    docs_dir = project_root / "docs"
+    constraint_candidates_path = arguments.constraint_candidates_path or (
+        docs_dir / "llm" / "api-conventions" / "sentence_constraint_candidates.json"
+    )
+    output_path = arguments.output_path or (
+        docs_dir / "llm" / "api-conventions" / "sentence_kube_api_linter_relations.json"
+    )
+    print(
+        f"[sentence-kube-api-linter-relations] loading constraint candidates from {constraint_candidates_path}",
+        flush=True,
+    )
+    draft_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_candidates_path)
+    tasks = kube_api_linter_relation.build_relation_tasks(draft_report)
+    if output_path.exists():
+        existing_report = kube_api_linter_relation.load_relation_report(output_path)
+        existing_validation = kube_api_linter_relation.validate_existing_report(existing_report, tasks)
+        if existing_validation.is_reusable:
+            related = sum(1 for relation in existing_report.relations if relation.rules)
+            print(f"[sentence-kube-api-linter-relations] skip existing report: {output_path}")
+            print(f"[sentence-kube-api-linter-relations] relations={len(existing_report.relations)}")
+            print(f"[sentence-kube-api-linter-relations] related={related}/{len(existing_report.relations)}")
+            return
+        print(
+            f"[sentence-kube-api-linter-relations] existing report is not reusable: {existing_validation.reason}",
+            flush=True,
+        )
+    print(f"[sentence-kube-api-linter-relations] selecting deterministic relations for {len(tasks)} tasks", flush=True)
+    report = kube_api_linter_relation.select_related_rules(tasks)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[sentence-kube-api-linter-relations] writing report to {output_path}", flush=True)
+    kube_api_linter_relation.save_relation_report(report, output_path)
+    related = sum(1 for relation in report.relations if relation.rules)
+    print(f"[sentence-kube-api-linter-relations] relations={len(report.relations)}")
+    print(f"[sentence-kube-api-linter-relations] related={related}/{len(report.relations)}")
+
+
 def _build_review_row(
     candidate: sentence_constraint_candidate.SentenceConstraintCandidate,
     *,
     interpretation: str,
+    kube_api_linter_rules: tuple[str, ...],
 ) -> dict[str, str]:
     return {
         "ID": candidate.id,
@@ -421,6 +498,7 @@ def _build_review_row(
         "Original": candidate.original,
         "Constraint": candidate.constraint,
         "Interpretation": interpretation,
+        "Kube-API-Linter": ";".join(kube_api_linter_rules),
         "Atomic": "",
         "Beyond-Syntax": "",
         "Diff-Closed": "",

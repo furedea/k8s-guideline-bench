@@ -15,6 +15,7 @@ def test_review_sheet_fieldnames_match_updated_atomic_review_schema() -> None:
         "Original",
         "Constraint",
         "Interpretation",
+        "Kube-API-Linter",
         "Atomic",
         "Beyond-Syntax",
         "Diff-Closed",
@@ -36,6 +37,7 @@ def test_build_review_row_initializes_human_review_columns() -> None:
             constraint="Draft constraint.",
         ),
         interpretation="Interpretation text.",
+        kube_api_linter_rules=("optionalorrequired", "maxlength (disabled)"),
     )
 
     assert row["ID"] == "block_0001_s1"
@@ -44,6 +46,7 @@ def test_build_review_row_initializes_human_review_columns() -> None:
     assert row["Original"] == "Original source text."
     assert row["Constraint"] == "Draft constraint."
     assert row["Interpretation"] == "Interpretation text."
+    assert row["Kube-API-Linter"] == "optionalorrequired;maxlength (disabled)"
     assert row["Atomic"] == ""
     assert row["Beyond-Syntax"] == ""
     assert row["Diff-Closed"] == ""
@@ -57,6 +60,7 @@ def test_build_review_row_initializes_human_review_columns() -> None:
 def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations(tmp_path: Path) -> None:
     candidates_path = tmp_path / "sentence_constraint_candidates.json"
     interpretations_path = tmp_path / "sentence_interpretations.json"
+    kube_api_linter_relations_path = tmp_path / "sentence_kube_api_linter_relations.json"
     output_path = tmp_path / "review.csv"
     candidates_path.write_text(
         json.dumps(
@@ -94,11 +98,25 @@ def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations
         ),
         encoding="utf-8",
     )
+    kube_api_linter_relations_path.write_text(
+        json.dumps(
+            {
+                "relations": [
+                    {
+                        "task_id": "block_0001_s1",
+                        "rules": ["optionalorrequired"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
 
     main._run_review_sheet(
         main.argparse.Namespace(
             constraint_candidates_path=candidates_path,
             interpretations_path=interpretations_path,
+            kube_api_linter_relations_path=kube_api_linter_relations_path,
             output_path=output_path,
         ),
     )
@@ -114,6 +132,7 @@ def test_run_review_sheet_writes_rows_from_draft_constraints_and_interpretations
             "Original": "Original source text.",
             "Constraint": "Draft constraint.",
             "Interpretation": "Interpretation text.",
+            "Kube-API-Linter": "optionalorrequired",
             "Atomic": "",
             "Beyond-Syntax": "",
             "Diff-Closed": "",

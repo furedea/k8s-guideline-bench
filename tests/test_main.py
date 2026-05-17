@@ -25,6 +25,10 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
         "main._run_sentence_interpretations",
         side_effect=lambda _: calls.append("sentence-interpretations"),
     )
+    kube_api_linter_relations = mocker.patch(
+        "main._run_sentence_kube_api_linter_relations",
+        side_effect=lambda _: calls.append("sentence-kube-api-linter-relations"),
+    )
     review_sheet = mocker.patch("main._run_review_sheet", side_effect=lambda _: calls.append("review-sheet"))
 
     main.main(())
@@ -34,6 +38,7 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
         "sentence-context-selection",
         "sentence-constraint-candidates",
         "sentence-interpretations",
+        "sentence-kube-api-linter-relations",
         "review-sheet",
     ]
     sentence_selection.assert_called_once()
@@ -68,9 +73,13 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_interpretations.call_args.args[0].max_retries == 3
     assert sentence_interpretations.call_args.args[0].batch_size == 25
     assert sentence_interpretations.call_args.args[0].stream_codex_output is False
+    kube_api_linter_relations.assert_called_once()
+    assert kube_api_linter_relations.call_args.args[0].constraint_candidates_path is None
+    assert kube_api_linter_relations.call_args.args[0].output_path is None
     review_sheet.assert_called_once()
     assert review_sheet.call_args.args[0].constraint_candidates_path is None
     assert review_sheet.call_args.args[0].interpretations_path is None
+    assert review_sheet.call_args.args[0].kube_api_linter_relations_path is None
     assert review_sheet.call_args.args[0].output_path is None
 
 
@@ -320,6 +329,43 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert "[sentence-interpretations] writing report to" in output
     assert "[sentence-interpretations] interpretations=1" in output
     assert "[sentence-interpretations] retry_attempts=0" in output
+
+
+def test_run_sentence_kube_api_linter_relations_writes_deterministic_hints(
+    tmp_path: Path,
+    capsys: CaptureFixture[str],
+) -> None:
+    constraint_candidates_path = tmp_path / "constraint-candidates.json"
+    output_path = tmp_path / "kube-api-linter-relations.json"
+    draft_report = main.sentence_constraint_candidate.SentenceConstraintCandidateReport(
+        candidates=(
+            main.sentence_constraint_candidate.SentenceConstraintCandidate(
+                id="block_0001_s1",
+                task_id="block_0001_s1",
+                source_span="10-10",
+                source_strength=("obligation",),
+                original="Fields must be either optional or required.",
+                constraint="Fields must explicitly use +optional or +required markers.",
+            ),
+        ),
+    )
+    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_candidates_path)
+
+    main._run_sentence_kube_api_linter_relations(
+        argparse.Namespace(
+            constraint_candidates_path=constraint_candidates_path,
+            output_path=output_path,
+        ),
+    )
+
+    saved = json.loads(output_path.read_text(encoding="utf-8"))
+    assert saved["relations"] == [{"task_id": "block_0001_s1", "rules": ["optionalorrequired"]}]
+    output = capsys.readouterr().out
+    assert "[sentence-kube-api-linter-relations] loading constraint candidates from" in output
+    assert "[sentence-kube-api-linter-relations] selecting deterministic relations for 1 tasks" in output
+    assert "[sentence-kube-api-linter-relations] writing report to" in output
+    assert "[sentence-kube-api-linter-relations] relations=1" in output
+    assert "[sentence-kube-api-linter-relations] related=1/1" in output
 
 
 def test_run_sentence_context_selection_skips_reusable_existing_report(
