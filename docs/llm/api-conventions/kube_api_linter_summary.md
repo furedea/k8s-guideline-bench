@@ -1,39 +1,39 @@
-# kube-api-linter reference for Beyond-Syntax review
+# Beyond-Syntax レビューのための kube-api-linter 参照
 
-This note summarizes the Kubernetes repository's enabled kube-api-linter rules for human review of API convention constraints.
+このメモは，API convention constraint の人間レビューで参照するために，Kubernetes repository で有効化されている kube-api-linter rule を整理したものです．
 
-Use this as supporting material, not as an automatic decision procedure.
+これは補助資料であり，自動判定手順ではありません．
 
-## Scope
+## 対象範囲
 
-The Kubernetes repository enables kube-api-linter through `hack/golangci.yaml`. The plugin settings are included from:
+Kubernetes repository では，`hack/golangci.yaml` 経由で kube-api-linter が有効化されています．plugin の詳細設定は次のファイルから取り込まれています．
 
 ```text
 hack/kube-api-linter/kube-api-linter.yaml
 ```
 
-The current Kubernetes configuration first disables all kube-api-linter rules and then explicitly enables 15 rules. Therefore, this reference focuses on the 15 enabled rules in `kube_api_linter_rules.csv`.
+現在の Kubernetes 設定では，まず kube-api-linter の全 rule を無効化し，その後に 15 個の rule だけを明示的に有効化しています．そのため，この参照資料では `kube_api_linter_rules.csv` にある 15 個の有効 rule を主な対象にします．
 
-## How to use during review
+## レビュー時の使い方
 
-- If a draft constraint directly corresponds to an enabled kube-api-linter rule, `Beyond-Syntax` is likely `false`.
-- Do not mark `Beyond-Syntax=false` from keyword overlap alone.
-- If a constraint requires semantic API design judgment, keep it as a human judgment even when related words appear in a linter rule.
-- General Go linters and formatters are secondary baselines. Consider them only when the draft constraint is explicitly about formatting or generic Go style.
+- draft constraint が有効な kube-api-linter rule に直接対応する場合，`Beyond-Syntax` は `false` 寄りです．
+- keyword が重なっているだけで `Beyond-Syntax=false` と判定しないでください．
+- constraint が API design の意味判断を必要とする場合，関連語が linter rule に出ていても人間判断として扱ってください．
+- 一般的な Go linter や formatter は補助的な baseline です．draft constraint が format や generic Go style を明示的に扱っている場合だけ考慮してください．
 
-## Enabled rules
+## 有効 rule
 
-The enabled rule reference is in:
+有効 rule の一覧は次の CSV にあります．
 
 ```text
 docs/llm/api-conventions/kube_api_linter_rules.csv
 ```
 
-The CSV is optimized for spreadsheet search. In particular, use the `Keywords` column to search from a draft constraint term such as `optional`, `condition`, `int32`, `json tag`, `listType`, `timestamp`, or `map`.
+この CSV はスプレッドシート上で検索しやすいように作っています．特に `Keywords` 列を使うと，draft constraint に出てくる `optional`，`condition`，`int32`，`json tag`，`listType`，`timestamp`，`map` などの語から対応しそうな rule を探せます．
 
-## Disabled visible rules
+## 設定上見えるが無効な rule
 
-The Kubernetes config also shows several commented-out kube-api-linter rules:
+Kubernetes の設定ファイルには，コメントアウトされた kube-api-linter rule もいくつかあります．
 
 ```text
 maxlength
@@ -44,14 +44,14 @@ requiredfields
 uniquemarkers
 ```
 
-These are not enforcement rules in the current Kubernetes configuration. They can indicate that a convention is potentially tool-detectable, but they should not be used as direct evidence for `Beyond-Syntax=false`.
+これらは現在の Kubernetes 設定では enforcement 対象ではありません．規約が将来的・原理的には tool-detectable である可能性を示す補助情報にはなりますが，`Beyond-Syntax=false` の直接根拠としては使わないでください．
 
-## Exceptions
+## 例外設定
 
-Kubernetes also maintains:
+Kubernetes には次の例外設定もあります．
 
 ```text
 hack/kube-api-linter/exceptions.yaml
 ```
 
-Exceptions do not mean the enabled rule is weak or disabled. They are an allowlist for existing API issues that cannot be fixed without compatibility risk. For review purposes, exceptions are useful evidence that a rule is tool-detectable, but compatibility may prevent applying the fix to old APIs.
+例外設定は，有効 rule が弱い，あるいは無効である，という意味ではありません．これは，互換性リスクなしには修正できない既存 API の問題を見逃すための allowlist です．レビュー時には，例外設定は「その種類の問題が tool-detectable である」ことの補助的な証拠になります．ただし，古い API では互換性のために修正できない場合がある，という点に注意してください．
