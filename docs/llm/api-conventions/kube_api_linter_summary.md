@@ -26,7 +26,7 @@ The current Kubernetes configuration first disables all kube-api-linter rules an
 The enabled rule reference is in:
 
 ```text
-docs/mechanical/api-conventions/kube_api_linter_rules.csv
+docs/llm/api-conventions/kube_api_linter_rules.csv
 ```
 
 The CSV is optimized for spreadsheet search. In particular, use the `Keywords` column to search from a draft constraint term such as `optional`, `condition`, `int32`, `json tag`, `listType`, `timestamp`, or `map`.
