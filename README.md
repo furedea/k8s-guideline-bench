@@ -29,7 +29,7 @@
 
 | # | 段階 | ディレクトリ | CLI | 主な入出力 |
 | --- | --- | --- | --- | --- |
-| 1 | 制約抽出 | `src/constraint_extraction/` | `uv run python src/constraint_extraction/main.py {source-selection,review-sheet}` | ガイドライン原文 → Atomic Constraints（JSON） |
+| 1 | 制約抽出 | `src/constraint_extraction/` | `uv run python src/constraint_extraction/main.py {sentence-selection-tasks,review-sheet}` | ガイドライン原文 → Atomic Constraints（JSON） |
 | 2 | データセット構築 | `src/dataset_construction/` | `uv run python src/dataset_construction/build_dataset.py --spec config/dataset_spec.json` | Kubernetes リポジトリ + GitHub PR metadata → `datasets/<pr_number>/` |
 | 3 | Agent 実行 | `src/agent_execution/` | `uv run python src/agent_execution/run_agent.py --spec config/experiment_spec_pilot.json` | `base/` + 規約 → `predicted_patch.diff` |
 | 4 | LLM-as-a-Judge | `src/llm_judgment/` | `uv run python src/llm_judgment/run_judgment.py --spec config/experiment_spec_pilot.json` | `predicted_patch.diff` + 規約 → `judgments.json` + 集計 |
@@ -388,7 +388,6 @@ Agent の標準出力は diff と見なさない．Agent が container 内の wo
 ```
 .
 ├── config/                              # Stage ごとの run spec (JSON)
-│   ├── source_selection.json
 │   ├── dataset_spec.json
 │   ├── experiment_spec_pilot.json
 │   └── experiment_spec_full.json
@@ -414,9 +413,7 @@ Agent の標準出力は diff と見なさない．Agent が container 内の wo
 │   │   ├── git_repository.py            # `repo_path` 不在時の自動 clone
 │   │   └── project_paths.py
 │   ├── constraint_extraction/           # Stage 1: 制約抽出
-│   │   ├── main.py                      # source-selection / review-sheet サブコマンド CLI
-│   │   ├── source_selection.py
-│   │   ├── source_selection_config.py
+│   │   ├── main.py                      # Constraint extraction pipeline CLI
 │   │   ├── normative_constraint.py
 │   │   ├── normative_audit.py
 │   │   └── atomic_constraint.py
