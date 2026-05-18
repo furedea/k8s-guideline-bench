@@ -1,21 +1,20 @@
 # API Conventions Normative Review Notes
 
-`keyword_normative_rules.json` は機械抽出した raw 集合です．
-`normative_constraints.json` は人手でレビューした集合です．
+この archive note は，旧 223 normative constraint pass の人手 review 判断を記録したものです．当時の `keyword_normative_rules.json` と `normative_constraints.json` は再生成可能な中間生成物だったため，現在の repository には保持していません．
 
 このファイルには，Python コードには入れない review 判断だけを記録します．
 
 ## 書き換えた規約
 
 - `kw_norm_052`
-  - Raw: `It should be included as a top level element in status, similar to`
-  - Reviewed: `Conditions should be included as a top level element in \`status\`.`
-  - 理由: 直前の文と直後の code example に依存していて，そのままだと規約文として不完全だからです．
+    - Raw: `It should be included as a top level element in status, similar to`
+    - Reviewed: `Conditions should be included as a top level element in \`status\`.`
+    - 理由：直前の文と直後の code example に依存していて，そのままだと規約文として不完全だからです．
 
 - `kw_norm_112`
-  - Raw: `This is expected to change in the future, and new fields should explicitly set either an \`+optional\` or \`+required\` comment tag.`
-  - Reviewed: `New fields should explicitly set either an \`+optional\` or \`+required\` comment tag.`
-  - 理由: 前半は説明であり，規約本体ではないからです．
+    - Raw: `This is expected to change in the future, and new fields should explicitly set either an \`+optional\` or \`+required\` comment tag.`
+    - Reviewed: `New fields should explicitly set either an \`+optional\` or \`+required\` comment tag.`
+    - 理由：前半は説明であり，規約本体ではないからです．
 
 ## 除外した規約
 

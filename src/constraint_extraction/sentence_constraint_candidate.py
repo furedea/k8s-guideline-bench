@@ -356,7 +356,7 @@ def _parse_constraint_candidate_response(
     constraints_by_task_id: dict[str, str] = {}
     for item in raw_tasks:
         task_id = str(item["task_id"])
-        constraints_by_task_id[task_id] = str(item["constraint"]).strip()
+        constraints_by_task_id[task_id] = _normalize_constraint_text(str(item["constraint"]))
 
     expected_task_ids = {task.id for task in tasks}
     missing_task_ids = tuple(task_id for task_id in expected_task_ids if not constraints_by_task_id.get(task_id))
@@ -365,6 +365,16 @@ def _parse_constraint_candidate_response(
         task_id: constraints for task_id, constraints in constraints_by_task_id.items() if task_id in expected_task_ids
     }
     return constraints_by_task_id, missing_task_ids, extra_task_ids
+
+
+def _normalize_constraint_text(text: str) -> str:
+    normalized = text.strip()
+    normalized = normalized.replace("\uff0c", ", ")
+    normalized = normalized.replace("\uff0e", ".")
+    normalized = re.sub(r"\s+([,.])", r"\1", normalized)
+    normalized = re.sub(r",\s*", ", ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
 
 
 def _retry_attempts_for_validation(

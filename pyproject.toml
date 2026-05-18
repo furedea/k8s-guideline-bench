@@ -52,6 +52,7 @@ known_first_party = [
   "git_repository",
   "gold_scope",
   "judge",
+  "kube_api_linter_relation",
   "local_llm_proxy",
   "main",
   "normative_audit",

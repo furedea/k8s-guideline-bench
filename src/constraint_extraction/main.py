@@ -1,14 +1,16 @@
 """CLI entry point for Stage 1 constraint extraction tools.
 
 Subcommands:
-    sentence-selection-tasks
-                      Generate sentence selection task JSON.
+    normative-sentence-selection
+                      Generate normative sentence selection JSON.
     sentence-context-selection
                       Select source context sentences with Codex.
-    sentence-constraint-candidates
-                      Generate atomic constraint candidates with Codex.
-    sentence-interpretations
-                      Generate source interpretations with Codex.
+    constraint-drafts
+                      Generate draft constraints with Codex.
+    constraint-interpretations
+                      Generate draft constraint interpretations with Codex.
+    kube-api-linter-hints
+                      Generate kube-api-linter review hints.
     review-sheet      Generate atomic constraint review sheet CSV.
 """
 
@@ -21,10 +23,13 @@ ROOT = Path(__file__).resolve().parents[2]
 for _stage in ("constraint_extraction", "common", ""):
     sys.path.insert(0, str(ROOT / "src" / _stage))
 
+import kube_api_linter_relation  # noqa: E402
 import normative_audit  # noqa: E402
 import sentence_constraint_candidate  # noqa: E402
 import sentence_context_selection  # noqa: E402
 import sentence_interpretation  # noqa: E402
+
+CONSTRAINT_ARTIFACTS_DIR = Path("artifacts") / "constraint-extraction" / "api-conventions"
 
 REVIEW_SHEET_FIELDNAMES = [
     "ID",
@@ -33,6 +38,7 @@ REVIEW_SHEET_FIELDNAMES = [
     "Original",
     "Constraint",
     "Interpretation",
+    "Kube-API-Linter",
     "Atomic",
     "Beyond-Syntax",
     "Diff-Closed",
@@ -53,10 +59,10 @@ def main(argv: tuple[str, ...] | None = None) -> None:
             help="Generate atomic constraint review sheet CSV from normative constraints.",
         ),
     )
-    _configure_sentence_selection_tasks_parser(
+    _configure_normative_sentence_selection_parser(
         subparsers.add_parser(
-            "sentence-selection-tasks",
-            help="Generate sentence selection task JSON for one-shot LLM normalization.",
+            "normative-sentence-selection",
+            help="Generate normative sentence selection JSON for one-shot LLM normalization.",
         ),
     )
     _configure_sentence_context_selection_parser(
@@ -65,16 +71,22 @@ def main(argv: tuple[str, ...] | None = None) -> None:
             help="Select source context sentences for generated sentence selection tasks.",
         ),
     )
-    _configure_sentence_constraint_candidates_parser(
+    _configure_constraint_drafts_parser(
         subparsers.add_parser(
-            "sentence-constraint-candidates",
-            help="Generate atomic constraint candidates from selected originals.",
+            "constraint-drafts",
+            help="Generate draft constraints from selected originals.",
         ),
     )
-    _configure_sentence_interpretations_parser(
+    _configure_constraint_interpretations_parser(
         subparsers.add_parser(
-            "sentence-interpretations",
-            help="Generate source interpretations for selected originals.",
+            "constraint-interpretations",
+            help="Generate reviewer-facing interpretations for draft constraints.",
+        ),
+    )
+    _configure_kube_api_linter_hints_parser(
+        subparsers.add_parser(
+            "kube-api-linter-hints",
+            help="Generate kube-api-linter review hints for draft constraints.",
         ),
     )
     arguments = parser.parse_args(argv)
@@ -86,8 +98,8 @@ def main(argv: tuple[str, ...] | None = None) -> None:
 
 def _run_default_constraint_pipeline() -> None:
     """Run the standard constraint extraction pipeline."""
-    print("[constraint-extraction] running sentence-selection-tasks", flush=True)
-    _run_sentence_selection_tasks(
+    print("[constraint-extraction] running normative-sentence-selection", flush=True)
+    _run_normative_sentence_selection(
         argparse.Namespace(
             conventions_path=None,
             output_path=None,
@@ -107,8 +119,8 @@ def _run_default_constraint_pipeline() -> None:
             stream_codex_output=False,
         ),
     )
-    print("[constraint-extraction] running sentence-constraint-candidates", flush=True)
-    _run_sentence_constraint_candidates(
+    print("[constraint-extraction] running constraint-drafts", flush=True)
+    _run_constraint_drafts(
         argparse.Namespace(
             tasks_path=None,
             context_selection_path=None,
@@ -121,10 +133,10 @@ def _run_default_constraint_pipeline() -> None:
             stream_codex_output=False,
         ),
     )
-    print("[constraint-extraction] running sentence-interpretations", flush=True)
-    _run_sentence_interpretations(
+    print("[constraint-extraction] running constraint-interpretations", flush=True)
+    _run_constraint_interpretations(
         argparse.Namespace(
-            constraint_candidates_path=None,
+            constraint_drafts_path=None,
             output_path=None,
             codex_command="codex",
             model=None,
@@ -134,28 +146,37 @@ def _run_default_constraint_pipeline() -> None:
             stream_codex_output=False,
         ),
     )
+    print("[constraint-extraction] running kube-api-linter-hints", flush=True)
+    _run_kube_api_linter_hints(
+        argparse.Namespace(
+            constraint_drafts_path=None,
+            output_path=None,
+        ),
+    )
     print("[constraint-extraction] running review-sheet", flush=True)
     _run_review_sheet(
         argparse.Namespace(
-            constraint_candidates_path=None,
-            interpretations_path=None,
+            constraint_drafts_path=None,
+            constraint_interpretations_path=None,
+            kube_api_linter_hints_path=None,
             output_path=None,
         ),
     )
 
 
 def _configure_review_sheet_parser(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--constraint-candidates-path", type=Path, default=None)
-    _ = parser.add_argument("--interpretations-path", type=Path, default=None)
+    _ = parser.add_argument("--constraint-drafts-path", type=Path, default=None)
+    _ = parser.add_argument("--constraint-interpretations-path", type=Path, default=None)
+    _ = parser.add_argument("--kube-api-linter-hints-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     parser.set_defaults(func=_run_review_sheet)
 
 
-def _configure_sentence_selection_tasks_parser(parser: argparse.ArgumentParser) -> None:
+def _configure_normative_sentence_selection_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--conventions-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     _ = parser.add_argument("--audit-output-path", type=Path, default=None)
-    parser.set_defaults(func=_run_sentence_selection_tasks)
+    parser.set_defaults(func=_run_normative_sentence_selection)
 
 
 def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser) -> None:
@@ -170,7 +191,7 @@ def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser
     parser.set_defaults(func=_run_sentence_context_selection)
 
 
-def _configure_sentence_constraint_candidates_parser(parser: argparse.ArgumentParser) -> None:
+def _configure_constraint_drafts_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--tasks-path", type=Path, default=None)
     _ = parser.add_argument("--context-selection-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
@@ -180,11 +201,11 @@ def _configure_sentence_constraint_candidates_parser(parser: argparse.ArgumentPa
     _ = parser.add_argument("--max-retries", type=int, default=3)
     _ = parser.add_argument("--batch-size", type=int, default=25)
     _ = parser.add_argument("--stream-codex-output", action="store_true")
-    parser.set_defaults(func=_run_sentence_constraint_candidates)
+    parser.set_defaults(func=_run_constraint_drafts)
 
 
-def _configure_sentence_interpretations_parser(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--constraint-candidates-path", type=Path, default=None)
+def _configure_constraint_interpretations_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--constraint-drafts-path", type=Path, default=None)
     _ = parser.add_argument("--output-path", type=Path, default=None)
     _ = parser.add_argument("--codex-command", type=str, default="codex")
     _ = parser.add_argument("--model", type=str, default=None)
@@ -192,50 +213,63 @@ def _configure_sentence_interpretations_parser(parser: argparse.ArgumentParser) 
     _ = parser.add_argument("--max-retries", type=int, default=3)
     _ = parser.add_argument("--batch-size", type=int, default=25)
     _ = parser.add_argument("--stream-codex-output", action="store_true")
-    parser.set_defaults(func=_run_sentence_interpretations)
+    parser.set_defaults(func=_run_constraint_interpretations)
+
+
+def _configure_kube_api_linter_hints_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--constraint-drafts-path", type=Path, default=None)
+    _ = parser.add_argument("--output-path", type=Path, default=None)
+    parser.set_defaults(func=_run_kube_api_linter_hints)
 
 
 def _run_review_sheet(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
-    docs_dir = project_root / "docs"
-    constraint_candidates_path = arguments.constraint_candidates_path or (
-        docs_dir / "llm" / "api-conventions" / "sentence_constraint_candidates.json"
+    artifacts_dir = project_root / CONSTRAINT_ARTIFACTS_DIR
+    constraint_drafts_path = arguments.constraint_drafts_path or (artifacts_dir / "llm" / "constraint_drafts.json")
+    constraint_interpretations_path = arguments.constraint_interpretations_path or (
+        artifacts_dir / "llm" / "constraint_interpretations.json"
     )
-    interpretations_path = arguments.interpretations_path or (
-        docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json"
+    kube_api_linter_hints_path = arguments.kube_api_linter_hints_path or (
+        artifacts_dir / "llm" / "kube_api_linter_hints.json"
     )
-    output_path = arguments.output_path or (
-        docs_dir / "human" / "api-conventions" / "atomic_constraint_review_sheet.csv"
-    )
+    output_path = arguments.output_path or (artifacts_dir / "human" / "atomic_constraint_review_sheet.csv")
 
-    print(f"[review-sheet] loading constraint candidates from {constraint_candidates_path}", flush=True)
-    candidate_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_candidates_path)
-    print(f"[review-sheet] loading interpretations from {interpretations_path}", flush=True)
-    interpretation_report = sentence_interpretation.load_interpretation_report(interpretations_path)
+    print(f"[review-sheet] loading constraint drafts from {constraint_drafts_path}", flush=True)
+    candidate_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_drafts_path)
+    print(f"[review-sheet] loading constraint interpretations from {constraint_interpretations_path}", flush=True)
+    interpretation_report = sentence_interpretation.load_interpretation_report(constraint_interpretations_path)
     interpretations = {
         interpretation.task_id: interpretation.interpretation
         for interpretation in interpretation_report.interpretations
     }
+    print(f"[review-sheet] loading kube-api-linter hints from {kube_api_linter_hints_path}", flush=True)
+    relation_report = kube_api_linter_relation.load_relation_report(kube_api_linter_hints_path)
+    kube_api_linter_rules = {relation.task_id: relation.rules for relation in relation_report.relations}
     rows = [
-        _build_review_row(candidate, interpretation=interpretations.get(candidate.task_id, ""))
+        _build_review_row(
+            candidate,
+            interpretation=interpretations.get(candidate.task_id, ""),
+            kube_api_linter_rules=kube_api_linter_rules.get(candidate.task_id, ()),
+        )
         for candidate in candidate_report.candidates
     ]
     _write_csv(rows, output_path)
 
     filled = sum(1 for row in rows if row["Interpretation"])
+    related = sum(1 for row in rows if row["Kube-API-Linter"])
     print(f"[review-sheet] written rows={len(rows)} to {output_path}")
     print(f"[review-sheet] interpretations={filled}/{len(rows)}")
+    print(f"[review-sheet] kube_api_linter_hints={related}/{len(rows)}")
 
 
-def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
+def _run_normative_sentence_selection(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
     docs_dir = project_root / "docs"
+    artifacts_dir = project_root / CONSTRAINT_ARTIFACTS_DIR
     conventions_path = arguments.conventions_path or (docs_dir / "source" / "api-conventions.md")
-    output_path = arguments.output_path or (
-        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
-    )
+    output_path = arguments.output_path or (artifacts_dir / "mechanical" / "normative_sentence_selection.json")
     audit_output_path = arguments.audit_output_path or (
-        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_audit.json"
+        artifacts_dir / "mechanical" / "normative_sentence_selection_audit.json"
     )
 
     artifacts = normative_audit.extract_sentence_selection_artifacts(conventions_path.read_text(encoding="utf-8"))
@@ -250,11 +284,9 @@ def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
 
 def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
-    docs_dir = project_root / "docs"
-    tasks_path = arguments.tasks_path or (
-        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
-    )
-    output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json")
+    artifacts_dir = project_root / CONSTRAINT_ARTIFACTS_DIR
+    tasks_path = arguments.tasks_path or (artifacts_dir / "mechanical" / "normative_sentence_selection.json")
+    output_path = arguments.output_path or (artifacts_dir / "llm" / "sentence_context_selection.json")
     print(f"[sentence-context-selection] loading tasks from {tasks_path}", flush=True)
     tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
     if output_path.exists():
@@ -310,37 +342,33 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
         )
 
 
-def _run_sentence_constraint_candidates(arguments: argparse.Namespace) -> None:
+def _run_constraint_drafts(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
-    docs_dir = project_root / "docs"
-    tasks_path = arguments.tasks_path or (
-        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
-    )
+    artifacts_dir = project_root / CONSTRAINT_ARTIFACTS_DIR
+    tasks_path = arguments.tasks_path or (artifacts_dir / "mechanical" / "normative_sentence_selection.json")
     context_selection_path = arguments.context_selection_path or (
-        docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json"
+        artifacts_dir / "llm" / "sentence_context_selection.json"
     )
-    output_path = arguments.output_path or (
-        docs_dir / "llm" / "api-conventions" / "sentence_constraint_candidates.json"
-    )
-    print(f"[sentence-constraint-candidates] loading tasks from {tasks_path}", flush=True)
+    output_path = arguments.output_path or (artifacts_dir / "llm" / "constraint_drafts.json")
+    print(f"[constraint-drafts] loading tasks from {tasks_path}", flush=True)
     sentence_tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
-    print(f"[sentence-constraint-candidates] loading context selections from {context_selection_path}", flush=True)
+    print(f"[constraint-drafts] loading context selections from {context_selection_path}", flush=True)
     context_report = sentence_context_selection.load_context_selection_report(context_selection_path)
     tasks = sentence_constraint_candidate.build_constraint_candidate_tasks(sentence_tasks, context_report)
     if output_path.exists():
         existing_report = sentence_constraint_candidate.load_constraint_candidate_report(output_path)
         existing_validation = sentence_constraint_candidate.validate_existing_report(existing_report, tasks)
         if existing_validation.is_reusable:
-            print(f"[sentence-constraint-candidates] skip existing report: {output_path}")
-            print(f"[sentence-constraint-candidates] candidates={len(existing_report.candidates)}")
-            print(f"[sentence-constraint-candidates] retry_attempts={len(existing_report.retry_attempts)}")
+            print(f"[constraint-drafts] skip existing report: {output_path}")
+            print(f"[constraint-drafts] drafts={len(existing_report.candidates)}")
+            print(f"[constraint-drafts] retry_attempts={len(existing_report.retry_attempts)}")
             return
         print(
-            f"[sentence-constraint-candidates] existing report is not reusable: {existing_validation.reason}",
+            f"[constraint-drafts] existing report is not reusable: {existing_validation.reason}",
             flush=True,
         )
     print(
-        f"[sentence-constraint-candidates] running codex for {len(tasks)} tasks "
+        f"[constraint-drafts] running codex for {len(tasks)} tasks "
         f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "
         f"max_retries={arguments.max_retries}, batch_size={arguments.batch_size}, "
         f"stream_codex_output={arguments.stream_codex_output})",
@@ -357,36 +385,34 @@ def _run_sentence_constraint_candidates(arguments: argparse.Namespace) -> None:
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[sentence-constraint-candidates] writing report to {output_path}", flush=True)
+    print(f"[constraint-drafts] writing report to {output_path}", flush=True)
     sentence_constraint_candidate.save_constraint_candidate_report(report, output_path)
-    print(f"[sentence-constraint-candidates] candidates={len(report.candidates)}")
-    print(f"[sentence-constraint-candidates] retry_attempts={len(report.retry_attempts)}")
+    print(f"[constraint-drafts] drafts={len(report.candidates)}")
+    print(f"[constraint-drafts] retry_attempts={len(report.retry_attempts)}")
 
 
-def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
+def _run_constraint_interpretations(arguments: argparse.Namespace) -> None:
     project_root = Path(__file__).resolve().parents[2]
-    docs_dir = project_root / "docs"
-    constraint_candidates_path = arguments.constraint_candidates_path or (
-        docs_dir / "llm" / "api-conventions" / "sentence_constraint_candidates.json"
-    )
-    output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json")
-    print(f"[sentence-interpretations] loading constraint candidates from {constraint_candidates_path}", flush=True)
-    draft_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_candidates_path)
+    artifacts_dir = project_root / CONSTRAINT_ARTIFACTS_DIR
+    constraint_drafts_path = arguments.constraint_drafts_path or (artifacts_dir / "llm" / "constraint_drafts.json")
+    output_path = arguments.output_path or (artifacts_dir / "llm" / "constraint_interpretations.json")
+    print(f"[constraint-interpretations] loading constraint drafts from {constraint_drafts_path}", flush=True)
+    draft_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_drafts_path)
     tasks = sentence_interpretation.build_interpretation_tasks(draft_report)
     if output_path.exists():
         existing_report = sentence_interpretation.load_interpretation_report(output_path)
         existing_validation = sentence_interpretation.validate_existing_report(existing_report, tasks)
         if existing_validation.is_reusable:
-            print(f"[sentence-interpretations] skip existing report: {output_path}")
-            print(f"[sentence-interpretations] interpretations={len(existing_report.interpretations)}")
-            print(f"[sentence-interpretations] retry_attempts={len(existing_report.retry_attempts)}")
+            print(f"[constraint-interpretations] skip existing report: {output_path}")
+            print(f"[constraint-interpretations] interpretations={len(existing_report.interpretations)}")
+            print(f"[constraint-interpretations] retry_attempts={len(existing_report.retry_attempts)}")
             return
         print(
-            f"[sentence-interpretations] existing report is not reusable: {existing_validation.reason}",
+            f"[constraint-interpretations] existing report is not reusable: {existing_validation.reason}",
             flush=True,
         )
     print(
-        f"[sentence-interpretations] running codex for {len(tasks)} tasks "
+        f"[constraint-interpretations] running codex for {len(tasks)} tasks "
         f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "
         f"max_retries={arguments.max_retries}, batch_size={arguments.batch_size}, "
         f"stream_codex_output={arguments.stream_codex_output})",
@@ -403,16 +429,52 @@ def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f"[sentence-interpretations] writing report to {output_path}", flush=True)
+    print(f"[constraint-interpretations] writing report to {output_path}", flush=True)
     sentence_interpretation.save_interpretation_report(report, output_path)
-    print(f"[sentence-interpretations] interpretations={len(report.interpretations)}")
-    print(f"[sentence-interpretations] retry_attempts={len(report.retry_attempts)}")
+    print(f"[constraint-interpretations] interpretations={len(report.interpretations)}")
+    print(f"[constraint-interpretations] retry_attempts={len(report.retry_attempts)}")
+
+
+def _run_kube_api_linter_hints(arguments: argparse.Namespace) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    artifacts_dir = project_root / CONSTRAINT_ARTIFACTS_DIR
+    constraint_drafts_path = arguments.constraint_drafts_path or (artifacts_dir / "llm" / "constraint_drafts.json")
+    output_path = arguments.output_path or (artifacts_dir / "llm" / "kube_api_linter_hints.json")
+    print(
+        f"[kube-api-linter-hints] loading constraint drafts from {constraint_drafts_path}",
+        flush=True,
+    )
+    draft_report = sentence_constraint_candidate.load_constraint_candidate_report(constraint_drafts_path)
+    tasks = kube_api_linter_relation.build_relation_tasks(draft_report)
+    if output_path.exists():
+        existing_report = kube_api_linter_relation.load_relation_report(output_path)
+        existing_validation = kube_api_linter_relation.validate_existing_report(existing_report, tasks)
+        if existing_validation.is_reusable:
+            related = sum(1 for relation in existing_report.relations if relation.rules)
+            print(f"[kube-api-linter-hints] skip existing report: {output_path}")
+            print(f"[kube-api-linter-hints] hints={len(existing_report.relations)}")
+            print(f"[kube-api-linter-hints] related={related}/{len(existing_report.relations)}")
+            return
+        print(
+            f"[kube-api-linter-hints] existing report is not reusable: {existing_validation.reason}",
+            flush=True,
+        )
+    print(f"[kube-api-linter-hints] selecting deterministic hints for {len(tasks)} tasks", flush=True)
+    report = kube_api_linter_relation.select_related_rules(tasks)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[kube-api-linter-hints] writing report to {output_path}", flush=True)
+    kube_api_linter_relation.save_relation_report(report, output_path)
+    related = sum(1 for relation in report.relations if relation.rules)
+    print(f"[kube-api-linter-hints] hints={len(report.relations)}")
+    print(f"[kube-api-linter-hints] related={related}/{len(report.relations)}")
 
 
 def _build_review_row(
     candidate: sentence_constraint_candidate.SentenceConstraintCandidate,
     *,
     interpretation: str,
+    kube_api_linter_rules: tuple[str, ...],
 ) -> dict[str, str]:
     return {
         "ID": candidate.id,
@@ -421,6 +483,7 @@ def _build_review_row(
         "Original": candidate.original,
         "Constraint": candidate.constraint,
         "Interpretation": interpretation,
+        "Kube-API-Linter": ";".join(kube_api_linter_rules),
         "Atomic": "",
         "Beyond-Syntax": "",
         "Diff-Closed": "",
@@ -432,6 +495,7 @@ def _build_review_row(
 
 
 def _write_csv(rows: list[dict[str, str]], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=REVIEW_SHEET_FIELDNAMES)
         writer.writeheader()

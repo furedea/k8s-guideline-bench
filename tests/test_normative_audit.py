@@ -287,6 +287,34 @@ When asserting a requirement in the positive, use "must". Examples: "must be gre
     ]
 
 
+def test_extract_sentence_selection_artifacts_excludes_navigation_sentences_from_tasks() -> None:
+    document = """
+## Object References Examples
+
+The following sections illustrate recommended schemas for various object references scenarios. Object references should use resource when kind is ambiguous.
+""".strip()
+
+    artifacts = normative_audit.extract_sentence_selection_artifacts(document)
+
+    assert [task.main_sentence.text for task in artifacts.tasks] == [
+        "Object references should use resource when kind is ambiguous.",
+    ]
+    assert [
+        (record.sentence.text, record.selection_status, record.exclusion_reason) for record in artifacts.audit_records
+    ] == [
+        (
+            "The following sections illustrate recommended schemas for various object references scenarios.",
+            normative_audit.SelectionStatus.EXCLUDED,
+            "navigation_sentence",
+        ),
+        (
+            "Object references should use resource when kind is ambiguous.",
+            normative_audit.SelectionStatus.INCLUDED,
+            None,
+        ),
+    ]
+
+
 def test_extract_sentence_selection_artifacts_excludes_http_status_code_children_from_tasks() -> None:
     document = """
 ## HTTP responses
@@ -400,6 +428,26 @@ Required fields have the following properties:
     ]
     assert [sentence.text for sentence in tasks[1].shared_context_sentences] == [
         "Required fields have the following properties:",
+    ]
+
+
+def test_extract_sentence_selection_tasks_offers_parent_bullet_for_nested_bullets() -> None:
+    document = """
+## Section
+
+- Optional zero values:
+  - In these cases, not using `omitempty` provides the same result, but pollutes the marshaled object with zero values and is not recommended.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert len(tasks) == 1
+    assert tasks[0].main_sentence.text == (
+        "In these cases, not using `omitempty` provides the same result, "
+        "but pollutes the marshaled object with zero values and is not recommended."
+    )
+    assert [sentence.text for sentence in tasks[0].shared_context_sentences] == [
+        "Optional zero values:",
     ]
 
 
