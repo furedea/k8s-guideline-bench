@@ -316,3 +316,34 @@ beyond_syntax = true:
 11. 人間が review sheet で確認する
 
 この設計では，LLM は文脈選択と constraint text の整理に使います．一方で，`original` の本文そのものは必ず source document から機械的に作ります．
+
+## 実行手順
+
+まず，Markdown から `main_sentence` と候補文を機械的に作ります．既存の結果を残したい場合は，先に `sentence_selection_tasks.json` と `sentence_selection_audit.json` を `.old` などへ移動します．
+
+```bash
+uv run python src/constraint_extraction/main.py sentence-selection-tasks
+```
+
+次に，LLM に context sentence ID だけを選ばせます．この段階では LLM に原文を書かせません．出力先の `sentence_context_selection.json` には，選ばれた ID と，その ID から機械的に復元した `original` と，重複選択の conflict が保存されます．
+
+Codex を one-shot で使う例：
+
+```bash
+uv run python src/constraint_extraction/main.py sentence-context-selection \
+  --model gpt-5.2
+```
+
+`codex` コマンド名や timeout を変える場合：
+
+```bash
+uv run python src/constraint_extraction/main.py sentence-context-selection \
+  --codex-command codex \
+  --model gpt-5.2 \
+  --timeout-seconds 1800 \
+  --max-retries 3
+```
+
+Codex が存在しない sentence ID を選んだ場合や，同じ通常 context sentence を複数の `main_sentence` に選んだ場合は，該当 task だけを自動で再実行します．`--max-retries` 回連続で直らない場合は停止し，どの task がどの理由で失敗したかを表示します．
+
+最終出力で conflict が 0 でない場合は，同じ通常 context sentence が複数の `main_sentence` に選ばれています．`shared_context_sentences` は共有してよい文なので，重複しても conflict にはしません．

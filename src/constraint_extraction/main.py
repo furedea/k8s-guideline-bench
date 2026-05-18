@@ -16,6 +16,7 @@ for _stage in ("constraint_extraction", "common", ""):
     sys.path.insert(0, str(ROOT / "src" / _stage))
 
 import normative_audit  # noqa: E402
+import sentence_context_selection  # noqa: E402
 
 REVIEW_SHEET_FIELDNAMES = [
     "id",
@@ -50,6 +51,12 @@ def main() -> None:
             help="Generate sentence selection task JSON for one-shot LLM normalization.",
         ),
     )
+    _configure_sentence_context_selection_parser(
+        subparsers.add_parser(
+            "sentence-context-selection",
+            help="Select source context sentences for generated sentence selection tasks.",
+        ),
+    )
     arguments = parser.parse_args()
     arguments.func(arguments)
 
@@ -67,6 +74,17 @@ def _configure_sentence_selection_tasks_parser(parser: argparse.ArgumentParser) 
     _ = parser.add_argument("--output-path", type=Path, default=None)
     _ = parser.add_argument("--audit-output-path", type=Path, default=None)
     parser.set_defaults(func=_run_sentence_selection_tasks)
+
+
+def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--tasks-path", type=Path, default=None)
+    _ = parser.add_argument("--output-path", type=Path, default=None)
+    _ = parser.add_argument("--codex-command", type=str, default="codex")
+    _ = parser.add_argument("--model", type=str, default=None)
+    _ = parser.add_argument("--timeout-seconds", type=int, default=1800)
+    _ = parser.add_argument("--max-retries", type=int, default=3)
+    _ = parser.add_argument("--stream-codex-output", action="store_true")
+    parser.set_defaults(func=_run_sentence_context_selection)
 
 
 def _run_review_sheet(arguments: argparse.Namespace) -> None:
@@ -111,6 +129,66 @@ def _run_sentence_selection_tasks(arguments: argparse.Namespace) -> None:
 
     print(f"Written {len(artifacts.tasks)} tasks to {output_path}")
     print(f"Written {len(artifacts.audit_records)} audit records to {audit_output_path}")
+
+
+def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    docs_dir = project_root / "docs"
+    tasks_path = arguments.tasks_path or (
+        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
+    )
+    output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json")
+    print(f"[sentence-context-selection] loading tasks from {tasks_path}", flush=True)
+    tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
+    if output_path.exists():
+        existing_report = sentence_context_selection.load_context_selection_report(output_path)
+        existing_validation = sentence_context_selection.validate_existing_report(existing_report, tasks)
+        if existing_validation.is_reusable:
+            print(f"[sentence-context-selection] skip existing report: {output_path}")
+            print(f"[sentence-context-selection] selections={len(existing_report.selections)}")
+            print(f"[sentence-context-selection] conflicts={len(existing_report.conflicts)}")
+            print(
+                "[sentence-context-selection] "
+                f"invalid_context_selections={len(existing_report.invalid_context_selections)}",
+            )
+            print(f"[sentence-context-selection] retry_attempts={len(existing_report.retry_attempts)}")
+            return
+        print(
+            f"[sentence-context-selection] existing report is not reusable: {existing_validation.reason}",
+            flush=True,
+        )
+    print(
+        f"[sentence-context-selection] running codex for {len(tasks)} tasks "
+        f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "
+        f"max_retries={arguments.max_retries}, stream_codex_output={arguments.stream_codex_output})",
+        flush=True,
+    )
+    report = sentence_context_selection.select_sentence_contexts_with_codex(
+        tasks,
+        codex_command=arguments.codex_command,
+        model=arguments.model,
+        timeout_seconds=arguments.timeout_seconds,
+        max_retries=arguments.max_retries,
+        stream_output=arguments.stream_codex_output,
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[sentence-context-selection] writing report to {output_path}", flush=True)
+    sentence_context_selection.save_context_selection_report(report, output_path)
+    print(f"[sentence-context-selection] selections={len(report.selections)}")
+    print(f"[sentence-context-selection] conflicts={len(report.conflicts)}")
+    print(f"[sentence-context-selection] invalid_context_selections={len(report.invalid_context_selections)}")
+    print(f"[sentence-context-selection] retry_attempts={len(report.retry_attempts)}")
+    for invalid_selection in report.invalid_context_selections[:10]:
+        print(
+            "[sentence-context-selection] invalid "
+            f"task={invalid_selection.task_id} sentence_id={invalid_selection.sentence_id} "
+            f"reason={invalid_selection.reason}",
+        )
+    if len(report.invalid_context_selections) > 10:
+        print(
+            f"[sentence-context-selection] invalid ... {len(report.invalid_context_selections) - 10} more",
+        )
 
 
 def _load_norms(path: Path) -> list[dict[str, Any]]:
