@@ -32,6 +32,60 @@ def test_build_constraint_candidate_tasks_joins_sentence_tasks_with_selected_ori
     assert tasks[0].source_span == sentence_tasks[0].source_span
     assert tasks[0].source_strength == ("obligation",)
     assert tasks[0].original == ("Optionality affects API compatibility. Fields must be either optional or required.")
+    assert tasks[0].reference_context == ()
+
+
+def test_build_constraint_candidate_tasks_adds_reference_context_only_for_demonstrative_originals() -> None:
+    sentence_tasks = (
+        _sentence_task(
+            task_id="block_0001_s1",
+            block_id="block_0001",
+            block_original="kind: a string that identifies the schema this object should have",
+            main_sentence_text="kind: a string that identifies the schema this object should have",
+        ),
+        _sentence_task(
+            task_id="block_0002_s1",
+            block_id="block_0002",
+            block_original="apiVersion: a string that identifies the version of the schema the object should have",
+            main_sentence_text="apiVersion: a string that identifies the version of the schema the object should have",
+        ),
+        _sentence_task(
+            task_id="block_0003_s1",
+            block_id="block_0003",
+            block_original="These fields are required for proper decoding of the object.",
+            main_sentence_text="These fields are required for proper decoding of the object.",
+        ),
+    )
+    context_report = sentence_context_selection.SentenceContextSelectionReport(
+        selections=(
+            sentence_context_selection.SentenceContextSelection(
+                task_id="block_0001_s1",
+                selected_context_sentence_ids=(),
+                original="kind: a string that identifies the schema this object should have",
+            ),
+            sentence_context_selection.SentenceContextSelection(
+                task_id="block_0002_s1",
+                selected_context_sentence_ids=(),
+                original="apiVersion: a string that identifies the version of the schema the object should have",
+            ),
+            sentence_context_selection.SentenceContextSelection(
+                task_id="block_0003_s1",
+                selected_context_sentence_ids=(),
+                original="These fields are required for proper decoding of the object.",
+            ),
+        ),
+        conflicts=(),
+    )
+
+    tasks = sentence_constraint_candidate.build_constraint_candidate_tasks(sentence_tasks, context_report)
+
+    assert tasks[0].reference_context == ()
+    assert tasks[1].reference_context == ()
+    assert tasks[2].reference_context == (
+        "Section: API conventions",
+        "Previous block: kind: a string that identifies the schema this object should have",
+        "Previous block: apiVersion: a string that identifies the version of the schema the object should have",
+    )
 
 
 def test_select_constraint_candidates_with_codex_writes_one_draft_per_original(mocker: MockerFixture) -> None:
@@ -77,6 +131,7 @@ def test_select_constraint_candidates_with_codex_writes_one_draft_per_original(m
         in (codex_run.call_args_list[0].args[0])
     )
     assert "Preserve the normative meaning" in codex_run.call_args_list[0].args[0]
+    assert "reference_context" in codex_run.call_args_list[0].args[0]
     assert codex_run.call_args_list[0].kwargs["model"] == "gpt-5.2"
     assert tuple(candidate.id for candidate in report.candidates) == (
         tasks[0].id,
@@ -211,11 +266,37 @@ def _candidate_tasks() -> tuple[sentence_constraint_candidate.SentenceConstraint
             source_span=sentence_tasks[0].source_span,
             source_strength=("obligation",),
             original="Fields must be either optional or required.",
+            reference_context=(),
         ),
         sentence_constraint_candidate.SentenceConstraintCandidateTask(
             id=sentence_tasks[1].id,
             source_span=sentence_tasks[1].source_span,
             source_strength=("recommendation",),
             original="New fields should explicitly set either `+optional` or `+required`.",
+            reference_context=(),
         ),
+    )
+
+
+def _sentence_task(
+    *,
+    task_id: str,
+    block_id: str,
+    block_original: str,
+    main_sentence_text: str,
+) -> normative_audit.SentenceSelectionTask:
+    return normative_audit.SentenceSelectionTask(
+        id=task_id,
+        block_id=block_id,
+        source_span="1-1",
+        section="API conventions",
+        kind=normative_audit.CandidateKind.PARAGRAPH_SENTENCE,
+        block_original=block_original,
+        main_sentence=normative_audit.SourceSentence(
+            id="s1",
+            text=main_sentence_text,
+            has_keyword=True,
+            signal_tags=(normative_audit.SignalTag.OBLIGATION,),
+        ),
+        context_sentences=(),
     )
