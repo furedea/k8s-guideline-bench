@@ -1,0 +1,1370 @@
+{
+  "selections": [
+    {
+      "task_id": "block_0007_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The name of a list kind must end with \"List\"."
+    },
+    {
+      "task_id": "block_0007_s3",
+      "selected_context_sentence_ids": [],
+      "original": "All lists use the required \"items\" field to contain the array of objects they return."
+    },
+    {
+      "task_id": "block_0007_s4",
+      "selected_context_sentence_ids": [
+        "s3"
+      ],
+      "original": "All lists use the required \"items\" field to contain the array of objects they return. Any kind that has the \"items\" field must be a list kind."
+    },
+    {
+      "task_id": "block_0008_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Most objects defined in the system should have an endpoint that returns the full set of resources, as well as zero or more endpoints that return subsets of the full list. Some objects may be singletons (the current user, the system defaults) and may not have lists."
+    },
+    {
+      "task_id": "block_0009_s1",
+      "selected_context_sentence_ids": [],
+      "original": "In addition, all lists that return objects with labels should support label filtering (see the labels documentation), and most lists should support filtering by fields (see the fields documentation)."
+    },
+    {
+      "task_id": "block_0015_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Many simple resources are \"subresources\", which are rooted at API paths of specific resources. When resources wish to expose alternative actions or views that are closely coupled to a single resource, they should do so using new sub-resources."
+    },
+    {
+      "task_id": "block_0017_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "`/status`: Used to write just the `status` portion of a resource. For example, the `/pods` endpoint only allows updates to `metadata` and `spec`, since those reflect end-user intent. An automated process should be able to modify status for users to see by sending an updated Pod kind to the server to the \"/pods/&lt;name&gt;/status\" endpoint - the alternate endpoint allows different rules to be applied to the update, and access to be appropriately restricted."
+    },
+    {
+      "task_id": "block_0020_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The standard REST verbs (defined below) MUST return singular JSON objects."
+    },
+    {
+      "task_id": "block_0022_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "The term \"kind\" is reserved for these \"top-level\" API types. The term \"type\" should be used for distinguishing sub-categories within objects or subobjects."
+    },
+    {
+      "task_id": "block_0023_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3"
+      ],
+      "original": "All JSON objects returned by an API MUST have the following fields: kind: a string that identifies the schema this object should have apiVersion: a string that identifies the version of the schema the object should have"
+    },
+    {
+      "task_id": "block_0024_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "All JSON objects returned by an API MUST have the following fields: kind: a string that identifies the schema this object should have"
+    },
+    {
+      "task_id": "block_0025_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "All JSON objects returned by an API MUST have the following fields: apiVersion: a string that identifies the version of the schema the object should have"
+    },
+    {
+      "task_id": "block_0026_s1",
+      "selected_context_sentence_ids": [],
+      "original": "These fields are required for proper decoding of the object."
+    },
+    {
+      "task_id": "block_0027_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7"
+      ],
+      "original": "Every object kind MUST have the following metadata in a nested object field called \"metadata\": namespace: a namespace is a DNS compatible label that objects are subdivided into. The default namespace is 'default'. See the namespace docs for more. name: a string that uniquely identifies this object within the current namespace (see the identifiers docs). This value is used in the path when retrieving an individual object. uid: a unique in time and space value (typically an RFC 4122 generated identifier, see the identifiers docs) used to distinguish between objects with the same name that have been deleted and recreated"
+    },
+    {
+      "task_id": "block_0031_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8",
+        "s9",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16"
+      ],
+      "original": "Every object SHOULD have the following metadata in a nested object field called \"metadata\": resourceVersion: a string that identifies the internal version of this object that can be used by clients to determine when objects have changed. This value MUST be treated as opaque by clients and passed unmodified back to the server. Clients should not assume that the resource version has meaning across namespaces, different kinds of resources, or different servers. (See concurrency control, below, for more details.) generation: a sequence number representing a specific generation of the desired state. Set by the system and monotonically increasing, per-resource. May be compared, such as for RAW and WAW consistency. creationTimestamp: a string representing an RFC 3339 date of the date and time an object was created deletionTimestamp: a string representing an RFC 3339 date of the date and time after which this resource will be deleted. This field is set by the server when a graceful deletion is requested by the user, and is not directly settable by a client. The resource will be deleted (no longer visible from resource lists, and not reachable by name) after the time in this field except when the object has a finalizer set. In case the finalizer is set the deletion of the object is postponed at least until the finalizer is removed. Once the deletionTimestamp is set, this value may not be unset or be set further into the future, although it may be shortened or the resource may be deleted prior to this time. labels: a map of string keys and values that can be used to organize and categorize objects (see the labels docs) annotations: a map of string keys and values that can be used by external tooling to store and retrieve arbitrary metadata about this object (see the annotations docs)"
+    },
+    {
+      "task_id": "block_0032_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "resourceVersion: a string that identifies the internal version of this object that can be used by clients to determine when objects have changed. This value MUST be treated as opaque by clients and passed unmodified back to the server."
+    },
+    {
+      "task_id": "block_0032_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "resourceVersion: a string that identifies the internal version of this object that can be used by clients to determine when objects have changed. This value MUST be treated as opaque by clients and passed unmodified back to the server. Clients should not assume that the resource version has meaning across namespaces, different kinds of resources, or different servers."
+    },
+    {
+      "task_id": "block_0040_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "The `status` summarizes the current state of the object in the system, and is usually persisted with the object by automated processes but may be generated on the fly. As a general guideline, fields in `status` should be the most recent observations of actual state, but they may contain information such as the results of allocations or similar operations which are executed in response to the object's `spec`."
+    },
+    {
+      "task_id": "block_0041_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Types with both `spec` and `status` stanzas can (and usually should) have distinct authorization scopes for them. This allows users to be granted full write access to `spec` and read-only access to status, while relevant controllers are granted read-only access to `spec` but full write access to status."
+    },
+    {
+      "task_id": "block_0042_s4",
+      "selected_context_sentence_ids": [
+        "s3",
+        "s5"
+      ],
+      "original": "The system will drive toward the most recent `spec` regardless of previous versions of that stanza. For example, if a value is changed from 2 to 5 in one PUT and then back down to 3 in another PUT the system is not required to 'touch base' at 5 before changing the `status` to 3. In other words, the system's behavior is *level-based* rather than *edge-based*."
+    },
+    {
+      "task_id": "block_0043_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "The Kubernetes API also serves as the foundation for the declarative configuration schema for the system. In order to facilitate level-based operation and expression of declarative configuration, fields in the specification should have declarative rather than imperative names and semantics -- they represent the desired state, not actions intended to yield the desired state."
+    },
+    {
+      "task_id": "block_0044_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The PUT and POST verbs on objects MUST ignore the `status` values, to avoid accidentally overwriting the `status` in read-modify-write scenarios."
+    },
+    {
+      "task_id": "block_0044_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "The PUT and POST verbs on objects MUST ignore the `status` values, to avoid accidentally overwriting the `status` in read-modify-write scenarios. A `/status` subresource MUST be provided to enable system components to update statuses of resources they manage."
+    },
+    {
+      "task_id": "block_0046_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "All objects that represent a physical resource whose state may vary from the user's desired intent SHOULD have a `spec` and a `status`. Objects whose state cannot vary from the user's desired intent MAY have only `spec`, and MAY rename `spec` to a more appropriate name."
+    },
+    {
+      "task_id": "block_0047_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Objects that contain both `spec` and `status` should not contain additional top-level fields other than the standard metadata fields."
+    },
+    {
+      "task_id": "block_0049_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2",
+        "s4",
+        "s5"
+      ],
+      "original": "Conditions provide a standard mechanism for higher-level status reporting from a controller. They are an extension mechanism which allows tools and other controllers to collect summary information about resources without needing to understand resource-specific status details. Conditions should complement more detailed information about the observed status of an object written by a controller, rather than replace it. For example, the \"Available\" condition of a Deployment can be determined by examining `readyReplicas`, `replicas`, and other properties of the Deployment. However, the \"Available\" condition allows other components to avoid duplicating the availability logic in the Deployment controller."
+    },
+    {
+      "task_id": "block_0050_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Objects may report multiple conditions, and new types of conditions may be added in the future or by 3rd party controllers. Therefore, conditions are represented using a list/slice of objects, where each condition has a similar structure. This collection should be treated as a map with a key of `type`."
+    },
+    {
+      "task_id": "block_0052_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Conditions should be added to explicitly convey properties that users and components care about rather than requiring those properties to be inferred from other observations. Once defined, the meaning of a Condition can not be changed arbitrarily - it becomes part of the API, and has the same backwards- and forwards-compatibility concerns of any other part of the API."
+    },
+    {
+      "task_id": "block_0053_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Controllers should apply their conditions to a resource the first time they visit the resource, even if the `status` is Unknown."
+    },
+    {
+      "task_id": "block_0054_s2",
+      "selected_context_sentence_ids": [],
+      "original": "For known conditions, the absence of a condition `status` should be interpreted the same as `Unknown`, and typically indicates that reconciliation has not yet finished (or that the resource state may not yet be observable)."
+    },
+    {
+      "task_id": "block_0056_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3"
+      ],
+      "original": "Condition type names should make sense for humans; neither positive nor negative polarity can be recommended as a general rule. A negative condition like \"MemoryExhausted\" may be easier for humans to understand than \"SufficientMemory\". Conversely, \"Ready\" or \"Succeeded\" may be easier to understand than \"Failed\", because \"Failed=Unknown\" or \"Failed=False\" may cause double-negative confusion."
+    },
+    {
+      "task_id": "block_0057_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Condition type names should describe the current observed state of the resource, rather than describing the current state transitions."
+    },
+    {
+      "task_id": "block_0057_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Condition type names should describe the current observed state of the resource, rather than describing the current state transitions. This typically means that the name should be an adjective (\"Ready\", \"OutOfDisk\") or a past-tense verb (\"Succeeded\", \"Failed\") rather than a present-tense verb (\"Deploying\")."
+    },
+    {
+      "task_id": "block_0058_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "For state transitions which take a long period of time (e.g. more than 1 minute), it is reasonable to treat the transition itself as an observed state. In these cases, the Condition (such as \"Resizing\") itself should not be transient, and should instead be signalled using the `True`/`False`/`Unknown` pattern."
+    },
+    {
+      "task_id": "block_0058_s4",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "For state transitions which take a long period of time (e.g. more than 1 minute), it is reasonable to treat the transition itself as an observed state. In cases where the state transition is unable to complete and continued reconciliation is not feasible, the Reason and Message should be used to indicate that the transition failed."
+    },
+    {
+      "task_id": "block_0060_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Conditions should follow the standard schema included in k8s.io/apimachinery/pkg/apis/meta/v1/types.go."
+    },
+    {
+      "task_id": "block_0060_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Conditions should follow the standard schema included in k8s.io/apimachinery/pkg/apis/meta/v1/types.go. It should be included as a top level element in status, similar to"
+    },
+    {
+      "task_id": "block_0063_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Use of the `Reason` field is required."
+    },
+    {
+      "task_id": "block_0064_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Condition types should be named in PascalCase."
+    },
+    {
+      "task_id": "block_0064_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Short condition names are preferred (e.g. \"Ready\" over \"MyResourceReady\")."
+    },
+    {
+      "task_id": "block_0065_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Condition `status` values may be `True`, `False`, or `Unknown`. The absence of a condition should be interpreted the same as `Unknown`."
+    },
+    {
+      "task_id": "block_0067_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "In general, condition values may change back and forth, but some condition transitions may be monotonic, depending on the resource and condition type. However, conditions are observations and not, themselves, state machines, nor do we define comprehensive state machines for objects, nor behaviors associated with state transitions. The system is level-based rather than edge-triggered, and should assume an Open World."
+    },
+    {
+      "task_id": "block_0069_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Some resources in the v1 API contain fields called `phase`, and associated `message`, `reason`, and other status fields. The pattern of using `phase` is deprecated."
+    },
+    {
+      "task_id": "block_0069_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s4",
+        "s5",
+        "s6"
+      ],
+      "original": "Some resources in the v1 API contain fields called `phase`, and associated `message`, `reason`, and other status fields. Newer API types should use conditions instead. Phase was essentially a state-machine enumeration field, that contradicted system-design principles and hampered evolution, since adding new enum values breaks backward compatibility. Rather than encouraging clients to infer implicit properties from phases, we prefer to explicitly expose the individual conditions that clients need to monitor. Conditions also have the benefit that it is possible to create some conditions with uniform meaning across all resource types, while still exposing others that are unique to specific resource types."
+    },
+    {
+      "task_id": "block_0072_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Status information that may be large (especially proportional in size to collections of other resources, such as lists of references to other objects -- see below) and/or rapidly changing, such as resource usage, should be put into separate objects, with possibly a reference from the original object. This helps to ensure that GETs and watch remain reasonably efficient for the majority of clients, which may not need that data."
+    },
+    {
+      "task_id": "block_0084_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Do not use numeric enums. Use aliases for string instead (e.g. `NodeConditionType`)."
+    },
+    {
+      "task_id": "block_0085_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All public integer fields MUST use the Go `int32` or Go `int64` types, not `int` (which is ambiguously sized, depending on target platform)."
+    },
+    {
+      "task_id": "block_0087_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Do not use unsigned integers, due to inconsistent support across languages and libraries. Just validate that the integer is non-negative if that's the case."
+    },
+    {
+      "task_id": "block_0088_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All numbers (e.g. `int32`, `int64`) are converted to `float64` by Javascript and some other languages, so any field which is expected to exceed that either in magnitude or in precision (e.g. integer values > 53 bits) should be serialized and accepted as strings."
+    },
+    {
+      "task_id": "block_0088_s2",
+      "selected_context_sentence_ids": [],
+      "original": "`int64` fields must be bounds-checked to be within the range of `-(2^53) < x < (2^53)`."
+    },
+    {
+      "task_id": "block_0089_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Avoid floating-point values as much as possible, and never use them in spec. Floating-point values cannot be reliably round-tripped (encoded and re-decoded) without changing, and have varying precision and representations across languages and architectures."
+    },
+    {
+      "task_id": "block_0091_s4",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "original": "Some fields will have a list of allowed values (enumerations). These values will be strings, and they will be in CamelCase, with an initial uppercase letter. Examples: `ClusterFirst`, `Pending`, `ClientIP`. When an acronym or initialism each letter in the acronym should be uppercase, such as with `ClientIP` or `TCPDelay`."
+    },
+    {
+      "task_id": "block_0091_s5",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2",
+        "s3"
+      ],
+      "original": "Some fields will have a list of allowed values (enumerations). These values will be strings, and they will be in CamelCase, with an initial uppercase letter. Examples: `ClusterFirst`, `Pending`, `ClientIP`. When a proper name or the name of a command-line executable is used as a constant the proper name should be represented in consistent casing - examples: `systemd`, `iptables`, `IPVS`, `cgroupfs`, `Docker` (as a generic concept), `docker` (as the command-line executable)."
+    },
+    {
+      "task_id": "block_0091_s6",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s5"
+      ],
+      "original": "Some fields will have a list of allowed values (enumerations). These values will be strings, and they will be in CamelCase, with an initial uppercase letter. Examples: `ClusterFirst`, `Pending`, `ClientIP`. When a proper name or the name of a command-line executable is used as a constant the proper name should be represented in consistent casing - examples: `systemd`, `iptables`, `IPVS`, `cgroupfs`, `Docker` (as a generic concept), `docker` (as the command-line executable). If a proper name is used which has mixed capitalization like `eBPF` that should be preserved in a longer constant such as `eBPFDelegation`."
+    },
+    {
+      "task_id": "block_0092_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All API within Kubernetes must leverage constants in this style, including flags and configuration files."
+    },
+    {
+      "task_id": "block_0092_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Where inconsistent constants were previously used, new flags should be CamelCase only, and over time old flags should be updated to accept a CamelCase value alongside the inconsistent constant."
+    },
+    {
+      "task_id": "block_0092_s4",
+      "selected_context_sentence_ids": [
+        "s3"
+      ],
+      "original": "Example: the Kubelet accepts a `--topology-manager-policy` flag that has values `none`, `best-effort`, `restricted`, and `single-numa-node`. This flag should accept `None`, `BestEffort`, `Restricted`, and `SingleNUMANode` going forward."
+    },
+    {
+      "task_id": "block_0092_s5",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s4"
+      ],
+      "original": "Where inconsistent constants were previously used, new flags should be CamelCase only, and over time old flags should be updated to accept a CamelCase value alongside the inconsistent constant. This flag should accept `None`, `BestEffort`, `Restricted`, and `SingleNUMANode` going forward. If new values are added to the flag, both forms should be supported."
+    },
+    {
+      "task_id": "block_0093_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Sometimes, at most one of a set of fields can be set. For example, the [volumes] field of a PodSpec has 17 different volume type-specific fields, such as `nfs` and `iscsi`. All fields in the set should be Optional."
+    },
+    {
+      "task_id": "block_0094_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Sometimes, when a new type is created, the api designer may anticipate that a union will be needed in the future, even if only one field is allowed initially. In this case, be sure to make the field Optional In the validation, you may still return an error if the sole field is unset. Do not set a default value for that field."
+    },
+    {
+      "task_id": "block_0095_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "original": "Every list or simple kind SHOULD have the following metadata in a nested object field called \"metadata\": resourceVersion: a string that identifies the common version of the objects returned by in a list. This value MUST be treated as opaque by clients and passed unmodified back to the server. A resource version is only valid within a single namespace on a single kind of resource."
+    },
+    {
+      "task_id": "block_0096_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "resourceVersion: a string that identifies the common version of the objects returned by in a list. This value MUST be treated as opaque by clients and passed unmodified back to the server."
+    },
+    {
+      "task_id": "block_0097_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Every simple kind returned by the server, and any simple kind sent to the server that must support idempotency or optimistic concurrency should return this value."
+    },
+    {
+      "task_id": "block_0097_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Every simple kind returned by the server, and any simple kind sent to the server that must support idempotency or optimistic concurrency should return this value. Since simple resources are often used as input alternate actions that modify objects, the resource version of the simple resource should correspond to the resource version of the object."
+    },
+    {
+      "task_id": "block_0102_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s10",
+        "s11",
+        "s14",
+        "s16"
+      ],
+      "original": "API resources should use the traditional REST pattern: GET /&lt;resourceNamePlural&gt; - Retrieve a list of type &lt;resourceName&gt;, e.g. GET /pods returns a list of Pods. POST /&lt;resourceNamePlural&gt; - Create a new resource from the JSON object provided by the client. GET /&lt;resourceNamePlural&gt;/&lt;name&gt; - Retrieves a single resource with the given name, e.g. GET /pods/first returns a Pod named 'first'. Should be constant time, and the resource should be bounded in size. DELETE /&lt;resourceNamePlural&gt;/&lt;name&gt; - Delete the single resource with the given name. DELETE /&lt;resourceNamePlural&gt; - Deletes a list of type &lt;resourceName&gt;, e.g. DELETE /pods a list of Pods. PUT /&lt;resourceNamePlural&gt;/&lt;name&gt; - Update or create the resource with the given name with the JSON object provided by the client. PATCH /&lt;resourceNamePlural&gt;/&lt;name&gt; - Selectively modify the specified fields of the resource. GET /&lt;resourceNamePlural&gt;&quest;watch=true - Receive a stream of JSON objects corresponding to changes made to any resource of the given kind over time."
+    },
+    {
+      "task_id": "block_0105_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "GET /&lt;resourceNamePlural&gt;/&lt;name&gt; - Retrieves a single resource with the given name, e.g. GET /pods/first returns a Pod named 'first'. Should be constant time, and the resource should be bounded in size."
+    },
+    {
+      "task_id": "block_0106_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "DELETE /&lt;resourceNamePlural&gt;/&lt;name&gt; - Delete the single resource with the given name. DeleteOptions may specify gracePeriodSeconds, the optional duration in seconds before the object should be deleted."
+    },
+    {
+      "task_id": "block_0121_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Note: Due to unpredictable behavior when short names collide (with each other or with resource types), do not add new short names to built-in resources unless specifically allowed by API reviewers."
+    },
+    {
+      "task_id": "block_0130_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Note: Due to inconsistent behavior when categories collide with resource types, and difficulties knowing when it is safe to add new resources to an existing category, do not add new categories to built-in resources unless specifically allowed by API reviewers."
+    },
+    {
+      "task_id": "block_0152_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All compatible Kubernetes APIs MUST support \"name idempotency\" and respond with an HTTP status code 409 when a request is made to POST an object that has the same name as an existing object in the system."
+    },
+    {
+      "task_id": "block_0153_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. GenerateName indicates that the name should be made unique by the server prior to persisting it."
+    },
+    {
+      "task_id": "block_0153_s3",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. A non-empty value for the field indicates the server should attempt to make the name unique (and the name returned to the client will be different than the name passed)."
+    },
+    {
+      "task_id": "block_0153_s5",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s4"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. The value of this field will be combined with a random suffix on the server if the Name field has not been provided. The provided value must be valid within the rules for Name, and may be truncated by the length of the suffix."
+    },
+    {
+      "task_id": "block_0153_s6",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s5"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. The provided value must be valid within the rules for Name, and may be truncated by the length of the suffix. If this field is specified, and Name is not present, the server will return a 409 with Reason `AlreadyExists` if the generated name exists, and the client should retry (after waiting at least the amount of time indicated in the Retry-After header, if it is present)."
+    },
+    {
+      "task_id": "block_0154_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Fields must be either optional or required."
+    },
+    {
+      "task_id": "block_0155_s1",
+      "selected_context_sentence_ids": [],
+      "original": "A field that is required means that the writer must express an opinion about the value of the field."
+    },
+    {
+      "task_id": "block_0156_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "An optional field is one where the writer may choose to omit the field entirely. Readers should not assume that the field is present, unless the field also has a server-side default value."
+    },
+    {
+      "task_id": "block_0162_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The API server should allow POSTing and PUTing a resource with this field unset."
+    },
+    {
+      "task_id": "block_0163_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When the field type has a built-in `nil` value, such as a map or a slice, and your use case means that you need to be able to distinguish between \"field not set\" and \"field set to an empty value\", you should use a pointer to the type, even though it has a built-in `nil` value."
+    },
+    {
+      "task_id": "block_0164_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Note that for backward compatibility, any field that has the `omitempty` struct tag, and is not explicitly marked as `+required`, will be considered to be optional."
+    },
+    {
+      "task_id": "block_0164_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Note that for backward compatibility, any field that has the `omitempty` struct tag, and is not explicitly marked as `+required`, will be considered to be optional. This is expected to change in the future, and new fields should explicitly set either an `+optional` or `+required` comment tag."
+    },
+    {
+      "task_id": "block_0167_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "Required fields have the following properties: They mark themselves as required explicitly with a `+required` comment tag."
+    },
+    {
+      "task_id": "block_0168_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "Required fields have the following properties: The API server should not allow POSTing or PUTing a resource with this field unset."
+    },
+    {
+      "task_id": "block_0169_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "Required fields have the following properties: They _typically_ do not use pointer types in the Go definition (e.g. `AnotherFlag SomeFlag`), though required fields where the zero value is a valid value must use pointer types, paired with an `omitempty` struct tag to avoid spurious null serializations."
+    },
+    {
+      "task_id": "block_0170_s1",
+      "selected_context_sentence_ids": [],
+      "original": "For more details on how to use pointers and `omitempty` with fields, see Serialization of optional/required fields."
+    },
+    {
+      "task_id": "block_0175_s1",
+      "selected_context_sentence_ids": [],
+      "original": "To determine whether a field should be a pointer, consider the following:"
+    },
+    {
+      "task_id": "block_0178_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "For `bool` types, the zero value is `false`, which is always a valid user choice. `bool` types should always be pointers, and should always use the `omitempty` tag."
+    },
+    {
+      "task_id": "block_0179_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When a field is required, and the zero value is not valid, a structured client who has not expressed an explicit choice will have their request rejected by the API server based on the invalid value, rather than the field being unset."
+    },
+    {
+      "task_id": "block_0182_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "When a field is required, and the zero value is not valid, a structured client who has not expressed an explicit choice will have their request rejected by the API server based on the invalid value, rather than the field being unset. In these cases, not using `omitempty` provides the same result, but pollutes the marshaled object with zero values and is not recommended."
+    },
+    {
+      "task_id": "block_0183_s1",
+      "selected_context_sentence_ids": [],
+      "original": "For structs, the zero value can only be valid when the struct has no required fields, and does not require at least one property to be set."
+    },
+    {
+      "task_id": "block_0184_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "For structs, the zero value can only be valid when the struct has no required fields, and does not require at least one property to be set. Required structs should use `omitzero` to avoid marshalling the zero value."
+    },
+    {
+      "task_id": "block_0197_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Avoid designing APIs that require the distinction between unset and `null`."
+    },
+    {
+      "task_id": "block_0205_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Some care is required when deciding which mechanism to use and managing the semantics."
+    },
+    {
+      "task_id": "block_0207_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "In some cases, these values may be conditional on or deterministically derived from other fields (e.g. \"if otherField is X then this field defaults to 0\" or \"this field defaults to the value of otherField\"). Note that such derived defaults present a hazard in the face of updates - if the \"other\" field changes, the derived field may have to change, too. The static defaulting logic is unaware of updates and has no concept of \"previous value\", which means this inter-field relationship becomes the user's problem - they must update both the field they care about and the \"other\" field."
+    },
+    {
+      "task_id": "block_0210_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Static defaults are the best choice for values which are logically required, but which have a value that works well for most users."
+    },
+    {
+      "task_id": "block_0210_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Static defaulting must not consider any state except the object being operated upon (and the complexity of Service API stands as an example of why)."
+    },
+    {
+      "task_id": "block_0213_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "In some cases, it is useful to set a default value which is not derived from the object in question. For example, when creating a PersistentVolumeClaim, the storage class must be specified."
+    },
+    {
+      "task_id": "block_0214_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Instead, we can provide a built-in admission controller or a MutatingWebhookConfiguration. Unlike static defaults, these may consider external state (such as annotations on StorageClass objects) when deciding default values, and must handle things like race conditions (e.g. a StorageClass is designated the default, but the admission controller has not yet seen that update)."
+    },
+    {
+      "task_id": "block_0214_s4",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s3"
+      ],
+      "original": "Instead, we can provide a built-in admission controller or a MutatingWebhookConfiguration. These admission controllers are strictly optional and can be disabled. As such, fields which are initialized this way must be strictly optional."
+    },
+    {
+      "task_id": "block_0217_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Like admission controlled defaults, these controllers may consider external state when deciding what values to set, must handle race conditions, and can be disabled."
+    },
+    {
+      "task_id": "block_0217_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Like admission controlled defaults, these controllers may consider external state when deciding what values to set, must handle race conditions, and can be disabled. Fields which are initialized this way must be strictly optional (meaning observers will see the object without these fields set, and that is allowable and semantically correct)."
+    },
+    {
+      "task_id": "block_0218_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Like all controllers, care must be taken to not clobber unrelated fields or values (e.g. in an array)."
+    },
+    {
+      "task_id": "block_0218_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Using one of the patch or apply mechanisms is recommended to facilitate composition and concurrency of controllers."
+    },
+    {
+      "task_id": "block_0219_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3",
+        "s4"
+      ],
+      "original": "All forms of defaulting should only make the following types of modifications: Setting previously unset fields Adding keys to maps Adding values to arrays which have mergeable semantics (`+listType=map` tag or `patchStrategy:\"merge\"` attribute in the type definition)"
+    },
+    {
+      "task_id": "block_0223_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "In particular we never want to change or override a value that was provided by the user. If they requested something invalid, they should get an error."
+    },
+    {
+      "task_id": "block_0228_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The goal is that, for a given input (e.g. YAML file), PUT on an existing object should produce the same result as if you used that input to create the object."
+    },
+    {
+      "task_id": "block_0228_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Calling PUT a second time with the same input should be idempotent and should not change the resource."
+    },
+    {
+      "task_id": "block_0231_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s4",
+        "s5"
+      ],
+      "original": "When adding a field with a static or admission controlled default, this must be considered. If the field is immutable after creation, consider adding logic to manually \"patch\" the value from the \"old\" object into the \"new\" one when it has been \"unset\", rather than returning an error or allocating a different value (e.g. Service IPs). This may require setting the default in a different way (e.g. in the registry code which understands updates instead of in the versioned defaulting code which does not). Be careful to detect and report legitimate errors where the \"new\" value is specified but is different from the \"old\" value."
+    },
+    {
+      "task_id": "block_0235_s2",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s3"
+      ],
+      "original": "The resourceVersion is currently backed by etcd's mod_revision. However, it's important to note that the application should *not* rely on the implementation details of the versioning system maintained by Kubernetes. We may change the implementation of resourceVersion in the future, such as to change it to a timestamp or per-object counter."
+    },
+    {
+      "task_id": "block_0236_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "The only way for a client to know the expected value of resourceVersion is to have received it from the server in response to a prior operation, typically a GET. This value MUST be treated as opaque by clients and passed unmodified back to the server."
+    },
+    {
+      "task_id": "block_0236_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2",
+        "s6"
+      ],
+      "original": "The only way for a client to know the expected value of resourceVersion is to have received it from the server in response to a prior operation, typically a GET. This value MUST be treated as opaque by clients and passed unmodified back to the server. Clients should not assume that the resource version has meaning across namespaces, different kinds of resources, or different servers. However, we expect the implementation of resourceVersion to change in the future, such as in the case we shard the state by kind and/or namespace, or port to another storage system."
+    },
+    {
+      "task_id": "block_0242_s1",
+      "selected_context_sentence_ids": [],
+      "original": "APIs may return alternative representations of any resource in response to an Accept header or under alternative endpoints, but the default serialization for input and output of API responses MUST be JSON."
+    },
+    {
+      "task_id": "block_0244_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All dates should be serialized as RFC3339 strings."
+    },
+    {
+      "task_id": "block_0245_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Units must either be explicit in the field name (e.g., `timeoutSeconds`), or must be specified as part of the value (e.g., `resource.Quantity`)."
+    },
+    {
+      "task_id": "block_0245_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Which approach is preferred is TBD, though currently we use the `fooSeconds` convention for durations."
+    },
+    {
+      "task_id": "block_0246_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Duration fields must be represented as integer fields with units being part of the field name (e.g. `leaseDurationSeconds`). We don't use Duration in the API since that would require clients to implement go-compatible parsing."
+    },
+    {
+      "task_id": "block_0250_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Object references on a namespaced type should usually refer only to objects in the same namespace. Because namespaces are a security boundary, cross namespace references can have unexpected impacts, including:"
+    },
+    {
+      "task_id": "block_0254_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "unclear semantics on deletion. If a namespaced resource is referenced by other namespaces, should a delete of the referenced resource result in removal or should the referenced resource be force to remain."
+    },
+    {
+      "task_id": "block_0256_s2",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s3"
+      ],
+      "original": "Built-in types and ownerReferences do not support cross namespaces references. If a non-built-in types chooses to have cross-namespace references the semantics of the edge cases above should be clearly described and the permissions issues should be resolved. This could be done with a double opt-in (an opt-in from both the referrer and the refer-ee) or with secondary permissions checks performed in admission."
+    },
+    {
+      "task_id": "block_0257_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The name of the reference field should be of the format \"{field}Ref\", with \"Ref\" always included in the suffix."
+    },
+    {
+      "task_id": "block_0258_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "The \"{field}\" component should be named to indicate the purpose of the reference. For example, \"targetRef\" in an endpoint indicates that the object reference specifies the target."
+    },
+    {
+      "task_id": "block_0260_s1",
+      "selected_context_sentence_ids": [],
+      "original": "In the case of a list of object references, the field should be of the format \"{field}Refs\", with the same guidance as the singular case above."
+    },
+    {
+      "task_id": "block_0262_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Controllers should assume that a version of a resource may change, and include appropriate error handling."
+    },
+    {
+      "task_id": "block_0267_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Controllers should be authored with the assumption that the referenced resource may not exist, and include error handling to make the issue clear to the user."
+    },
+    {
+      "task_id": "block_0271_s1",
+      "selected_context_sentence_ids": [],
+      "original": "To minimize potential privilege escalation vectors, do not modify the object that is being referred to, or limit modification to objects in the same namespace and constrain the type of modification allowed (for example, the HorizontalPodAutoscaler controller only writes to the `/scale` subresource)."
+    },
+    {
+      "task_id": "block_0274_s1",
+      "selected_context_sentence_ids": [],
+      "original": "In general, do not write or print information retrieved from the referred object to the spec, other objects, or logs."
+    },
+    {
+      "task_id": "block_0275_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When it is necessary, consider whether these values would be ones that the author of the referrer object would have access to via other means (e.g. already required to correctly populate the object reference)."
+    },
+    {
+      "task_id": "block_0280_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "This schema should only be used when the intention is to always have the reference only be to a single resource. If extending to multiple resource types is possible, use the multiple resource reference."
+    },
+    {
+      "task_id": "block_0285_s4",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2",
+        "s3",
+        "s5"
+      ],
+      "original": "A common point of confusion in object references is whether to construct references with a \"kind\" or \"resource\" field. Historically most object references in Kubernetes have used \"kind\". This is not as precise as \"resource\". Although each combination of \"group\" and \"resource\" must be unique within Kubernetes, the same is not always true for \"group\" and \"kind\". It is possible for multiple resources to make use of the same \"kind\"."
+    },
+    {
+      "task_id": "block_0288_s1",
+      "selected_context_sentence_ids": [],
+      "original": "If an object reference may be used to reference resources of arbitrary types and the mapping between kind and resource could be ambiguous, \"resource\" should be used in the object reference."
+    },
+    {
+      "task_id": "block_0292_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "It is also possible to have the controller choose a version that it finds via the discovery client. However, as schemas can vary across different versions of a resource, the controller must also handle these differences."
+    },
+    {
+      "task_id": "block_0295_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "The operator would be expected to find the resource via the discovery client (as the version is not supplied). As any retrievable field would be common to all objects, any version of the resource should do."
+    },
+    {
+      "task_id": "block_0297_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Field references differ from other reference types, as the operator has no knowledge of the object prior to the reference. Since the schema of an object can differ for different versions of a resource, this means that a “version” is required for this type of reference."
+    },
+    {
+      "task_id": "block_0298_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The fieldPath should point to a single value, and use the recommended field selector notation to denote the field path."
+    },
+    {
+      "task_id": "block_0299_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "In this scenario, the user will supply all of the required path elements: group, version, resource, name, and possibly namespace. As such, the controller can construct the API prefix and query it without the use of the discovery client:"
+    },
+    {
+      "task_id": "block_0365_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Kubernetes will always return the `Status` kind from any API endpoint when an error occurs. Clients SHOULD handle these types of objects when appropriate."
+    },
+    {
+      "task_id": "block_0369_s4",
+      "selected_context_sentence_ids": [
+        "s3"
+      ],
+      "original": "The information in the status object supplements, but does not override, the HTTP status code's meaning. When fields in the status object have the same meaning as generally defined HTTP headers and that header is returned with the response, the header should be considered as having higher priority."
+    },
+    {
+      "task_id": "block_0400_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "`NotFound` Indicates that one or more resources required for this operation could not be found."
+    },
+    {
+      "task_id": "block_0431_s1",
+      "selected_context_sentence_ids": [
+        "s0",
+        "s2"
+      ],
+      "original": "`Timeout` The server should set the `Retry-After` HTTP header and return `retryAfterSeconds` in the details field of the object. A value of `0` is the default."
+    },
+    {
+      "task_id": "block_0439_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "`ServerTimeout` The server should set the `Retry-After` HTTP header and return `retryAfterSeconds` in the details field of the object."
+    },
+    {
+      "task_id": "block_0452_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Events are complementary to status information, since they can provide some historical information about status and occurrences in addition to current or previous status. Generate events for situations users or administrators should be alerted about."
+    },
+    {
+      "task_id": "block_0456_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Go field names must be PascalCase."
+    },
+    {
+      "task_id": "block_0456_s2",
+      "selected_context_sentence_ids": [],
+      "original": "JSON field names must be camelCase."
+    },
+    {
+      "task_id": "block_0456_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Go field names must be PascalCase. JSON field names must be camelCase. Other than capitalization of the initial letter, the two should almost always match."
+    },
+    {
+      "task_id": "block_0457_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Field and resource names should be declarative, not imperative (SomethingDoer, DoneBy, DoneAt)."
+    },
+    {
+      "task_id": "block_0459_s1",
+      "selected_context_sentence_ids": [],
+      "original": "`FooController` is a deprecated kind naming convention."
+    },
+    {
+      "task_id": "block_0460_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The name of a field that specifies the time at which `something` occurs should be called `somethingTime`."
+    },
+    {
+      "task_id": "block_0460_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Do not use `stamp` (e.g., `creationTimestamp`)."
+    },
+    {
+      "task_id": "block_0462_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "We use the `fooSeconds` convention for durations, as discussed in the [units `fooPeriodSeconds` is preferred for periodic intervals and other waiting periods (e.g., over `fooIntervalSeconds`)."
+    },
+    {
+      "task_id": "block_0463_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "We use the `fooSeconds` convention for durations, as discussed in the [units `fooTimeoutSeconds` is preferred for inactivity/unresponsiveness deadlines."
+    },
+    {
+      "task_id": "block_0464_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "We use the `fooSeconds` convention for durations, as discussed in the [units `fooDeadlineSeconds` is preferred for activity completion deadlines."
+    },
+    {
+      "task_id": "block_0465_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Do not use abbreviations in the API, except where they are extremely commonly used, such as \"id\", \"args\", or \"stdin\"."
+    },
+    {
+      "task_id": "block_0466_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Acronyms should similarly only be used when extremely commonly known."
+    },
+    {
+      "task_id": "block_0466_s2",
+      "selected_context_sentence_ids": [],
+      "original": "All letters in the acronym should have the same case, using the appropriate case for the situation."
+    },
+    {
+      "task_id": "block_0466_s3",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "All letters in the acronym should have the same case, using the appropriate case for the situation. For example, at the beginning of a field name, the acronym should be all lowercase, such as \"httpGet\"."
+    },
+    {
+      "task_id": "block_0466_s4",
+      "selected_context_sentence_ids": [
+        "s3"
+      ],
+      "original": "For example, at the beginning of a field name, the acronym should be all lowercase, such as \"httpGet\". Where used as a constant, all letters should be uppercase, such as \"TCP\" or \"UDP\"."
+    },
+    {
+      "task_id": "block_0467_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The name of a field referring to another resource of kind `Foo` by name should be called `fooName`."
+    },
+    {
+      "task_id": "block_0467_s2",
+      "selected_context_sentence_ids": [],
+      "original": "The name of a field referring to another resource of kind `Foo` by ObjectReference (or subset thereof) should be called `fooRef`."
+    },
+    {
+      "task_id": "block_0469_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The name of a field expressing a boolean property called 'fooable' should be called `Fooable`, not `IsFooable`."
+    },
+    {
+      "task_id": "block_0470_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The name of a namespace must be a DNS_LABEL."
+    },
+    {
+      "task_id": "block_0473_s5",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Labels are the domain of users. They are intended to facilitate organization and management of API resources using attributes that are meaningful to users, as opposed to meaningful to the system. Users will use labels to select resources to operate on, display label values in CLI/UI columns, etc. Users should always retain full power and flexibility over the label schemas they apply to labels in their namespaces."
+    },
+    {
+      "task_id": "block_0474_s1",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3"
+      ],
+      "original": "However, we should support conveniences for common cases by default. For example, what we now do in ReplicationController is automatically set the RC's selector and labels to the labels in the pod template by default, if they are not already set. That ensures that the selector will match the template, and that the RC can be managed using the same labels as the pods it creates."
+    },
+    {
+      "task_id": "block_0476_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "For disciplined users managing resources within their own namespaces, it's not that hard to consistently apply schemas that ensure uniqueness. One just needs to ensure that at least one value of some label key in common differs compared to all other comparable resources. We could/should provide a verification tool to check that."
+    },
+    {
+      "task_id": "block_0478_s6",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Problems with uids and hashes, however, include that they have no semantic meaning to the user, are not memorable nor readily recognizable, and are not predictable. Lack of predictability obstructs use cases such as creation of a replication controller from a pod, such as people want to do when exploring the system, bootstrapping a self-hosted cluster, or deletion and re-creation of a new RC that adopts the pods of the previous one, such as to rename it. Users should always be able to turn off auto-generation, in order to permit some of the scenarios described above."
+    },
+    {
+      "task_id": "block_0479_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Inclusion of a system prefix in a label key is fairly hostile to UX. A prefix is only necessary in the case that the user cannot choose the label key, in order to avoid collisions with user-defined labels. However, I firmly believe that the user should always be allowed to select the label keys to use on their resources, so it should always be possible to override default label keys."
+    },
+    {
+      "task_id": "block_0480_s1",
+      "selected_context_sentence_ids": [
+        "s2"
+      ],
+      "original": "Therefore, resources supporting auto-generation of unique labels should have a `uniqueLabelKey` field, so that the user could specify the key if they wanted to, but if unspecified, it could be set by default, such as to the resource type, like job, deployment, or replicationController. The value would need to be at least spatially unique, and perhaps temporally unique in the case of job."
+    },
+    {
+      "task_id": "block_0481_s7",
+      "selected_context_sentence_ids": [
+        "s5",
+        "s6"
+      ],
+      "original": "Like labels, annotation keys can be prefixed with a governing domain (e.g. `example.com/key-name`). Unprefixed keys (e.g. `key-name`) are reserved for end-users. Third-party components must use prefixed keys."
+    },
+    {
+      "task_id": "block_0481_s8",
+      "selected_context_sentence_ids": [
+        "s5"
+      ],
+      "original": "Like labels, annotation keys can be prefixed with a governing domain (e.g. `example.com/key-name`). Key prefixes under the \"kubernetes.io\" and \"k8s.io\" domains are reserved for use by the kubernetes project and must not be used by third-parties."
+    },
+    {
+      "task_id": "block_0482_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "In early versions of Kubernetes, some in-development features represented new API fields as annotations, generally with the form `something.alpha.kubernetes.io/name` or `something.beta.kubernetes.io/name` (depending on our confidence in it). This pattern is deprecated."
+    },
+    {
+      "task_id": "block_0484_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Key names should be all lowercase, with words separated by dashes instead of camelCase"
+    },
+    {
+      "task_id": "block_0486_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Unprefixed keys are reserved for end-users. All other labels and annotations must be prefixed."
+    },
+    {
+      "task_id": "block_0489_s1",
+      "selected_context_sentence_ids": [
+        "s0"
+      ],
+      "original": "Key prefixes under \"kubernetes.io\" and \"k8s.io\" are reserved for the Kubernetes \"kubernetes.io\" is the preferred form for labels and annotations, \"k8s.io\" should not be used for new map keys."
+    },
+    {
+      "task_id": "block_0490_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Key names, including prefixes, should be precise enough that a user could plausibly understand where it came from and what it is for."
+    },
+    {
+      "task_id": "block_0491_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Key prefixes should carry as much context as possible."
+    },
+    {
+      "task_id": "block_0500_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Clients should use the SPDY protocols if their clients have native support, or WebSockets as a fallback."
+    },
+    {
+      "task_id": "block_0500_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "Clients should use the SPDY protocols if their clients have native support, or WebSockets as a fallback. Note that WebSockets is susceptible to Head-of-Line blocking and so clients must read and process each message sequentially."
+    },
+    {
+      "task_id": "block_0501_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "API objects are validated upon receipt by the apiserver. Validation can be implemented in two ways: declaratively, using tags on the Go type definitions, or manually, by writing validation functions. For all new APIs, declarative validation is the preferred approach for the validation rules it supports."
+    },
+    {
+      "task_id": "block_0502_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All fields should be declared optional or required, and validation should check the requiredness."
+    },
+    {
+      "task_id": "block_0503_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Almost all string fields should be checked for format."
+    },
+    {
+      "task_id": "block_0503_s2",
+      "selected_context_sentence_ids": [],
+      "original": "Some format checks include checking for length (e.g. \"short-name\", aka, \"DNS Label\" must be less than 64 bytes)."
+    },
+    {
+      "task_id": "block_0504_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All string fields should be checked for maximum length."
+    },
+    {
+      "task_id": "block_0504_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "All string fields should be checked for maximum length. If the field has a minimum length, that should also be checked."
+    },
+    {
+      "task_id": "block_0505_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Never do case-insensitive comparisons in validation. This is a source of bugs and failed uniqueness assumptions. If validation treats \"abc\" and \"ABC\" as the same, then ALL consumers of that field must do the same, and it is very easy to miss a case."
+    },
+    {
+      "task_id": "block_0506_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All numeric fields should be bounds-checked, both for too-small values (including negative) and for too-large values."
+    },
+    {
+      "task_id": "block_0507_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All list fields should be checked for maximum size."
+    },
+    {
+      "task_id": "block_0507_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "All list fields should be checked for maximum size. If the list has a minimum size, that should also be checked."
+    },
+    {
+      "task_id": "block_0508_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All list fields should have their \"listType\" tag(s) set."
+    },
+    {
+      "task_id": "block_0508_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "All list fields should have their \"listType\" tag(s) set. Lists with set or map semantics should be checked for uniqueness (declarative validation will do this authomatically)."
+    },
+    {
+      "task_id": "block_0509_s1",
+      "selected_context_sentence_ids": [],
+      "original": "All map fields should be checked for maximum size."
+    },
+    {
+      "task_id": "block_0509_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "All map fields should be checked for maximum size. If the map has a minimum size, that should also be checked."
+    },
+    {
+      "task_id": "block_0510_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Map fields should have their keys validated, in addition to their values."
+    },
+    {
+      "task_id": "block_0514_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When asserting a requirement in the positive, use \"must\"."
+    },
+    {
+      "task_id": "block_0514_s3",
+      "selected_context_sentence_ids": [],
+      "original": "Words like \"should\" imply that the assertion is optional, and must be avoided."
+    },
+    {
+      "task_id": "block_0515_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When asserting a formatting requirement in the negative, use \"must not\"."
+    },
+    {
+      "task_id": "block_0515_s3",
+      "selected_context_sentence_ids": [],
+      "original": "Words like \"should not\" imply that the assertion is optional, and must be avoided."
+    },
+    {
+      "task_id": "block_0519_s3",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "When specifying inequalities, use words rather than symbols. Do not use words like \"larger than\", \"bigger than\", \"more than\", \"higher than\", etc."
+    },
+    {
+      "task_id": "block_0523_s1",
+      "selected_context_sentence_ids": [],
+      "original": "A set of N fields, only one of which should be set at any given time - effectively a union."
+    },
+    {
+      "task_id": "block_0525_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When the user chooses to change the `discriminator` value (e.g., from `Type X` to `Type Y`) without changing any other fields then the system should clear the fields that were used to represent `Type X` in the union along with releasing resources that were attached to `Type X`."
+    },
+    {
+      "task_id": "block_0525_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "When the user chooses to change the `discriminator` value (e.g., from `Type X` to `Type Y`) without changing any other fields then the system should clear the fields that were used to represent `Type X` in the union along with releasing resources that were attached to `Type X`. This should automatically happen irrespective of how these values and resources were allocated (i.e., reserved by the user or automatically allocated by the system."
+    },
+    {
+      "task_id": "block_0526_s3",
+      "selected_context_sentence_ids": [
+        "s1",
+        "s2"
+      ],
+      "original": "Many API types include values that are allocated on behalf of the user from some larger space (e.g. IP addresses from a range, or storage bucket names). These allocations are usually driven by controllers asynchronously to the user's API operations. Sometimes the user can request a specific value and a controller must confirm or reject that request."
+    },
+    {
+      "task_id": "block_0527_s1",
+      "selected_context_sentence_ids": [],
+      "original": "The common theme among all of these is that the system should not trust users with such fields, and must verify or otherwise confirm such requests before using them."
+    },
+    {
+      "task_id": "block_0534_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Service `externalIPs`: Users must specify one or more specific IPs in `spec`."
+    },
+    {
+      "task_id": "block_0536_s1",
+      "selected_context_sentence_ids": [],
+      "original": "New APIs should almost never do this."
+    },
+    {
+      "task_id": "block_0536_s2",
+      "selected_context_sentence_ids": [
+        "s1"
+      ],
+      "original": "New APIs should almost never do this. Instead, they should use `status`."
+    },
+    {
+      "task_id": "block_0543_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Since almost everything is happening asynchronously to almost everything else, controller implementations should take care around the ordering of operations."
+    },
+    {
+      "task_id": "block_0543_s4",
+      "selected_context_sentence_ids": [
+        "s2",
+        "s3"
+      ],
+      "original": "For example, whether the controller updates a `status` field before or after it actuates a change depends on what guarantees need to be made to observers of the system. In some cases, writing to a `status` field represents an acknowledgement or acceptance of a `spec` value, and it is OK to write it before actuation. However, if it would be problematic for a client to observe the `status` value before it is actuated then the controller must actuate first and update `status` afterward."
+    },
+    {
+      "task_id": "block_0544_s1",
+      "selected_context_sentence_ids": [],
+      "original": "Controllers must take care to consider how a `status` field will be handled in the case of interrupted control loops (e.g. controller crash and restart), and must act idempotently and consistently."
+    },
+    {
+      "task_id": "block_0552_s1",
+      "selected_context_sentence_ids": [],
+      "original": "When using this pattern, you must account for lifecycle of the allocated objects (who cleans them up and when) as well as the \"linkage\" between them and the main type (often using the same name, an object-ref field, or a selector)."
+    }
+  ],
+  "conflicts": [],
+  "invalid_context_selections": [],
+  "retry_attempts": [
+    {
+      "attempt": 1,
+      "task_ids": [
+        "block_0092_s2",
+        "block_0092_s4"
+      ],
+      "reason": "context_selection_conflict",
+      "details": [
+        "s3"
+      ]
+    }
+  ]
+}

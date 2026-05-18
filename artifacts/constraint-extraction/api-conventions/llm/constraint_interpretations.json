@@ -1,0 +1,2094 @@
+{
+  "interpretations": [
+    {
+      "task_id": "block_0007_s1",
+      "source_span": "145-147",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The name of a list kind must end with \"List\".",
+      "constraint": "The name of a list kind must end with \"List\".",
+      "interpretation": "リスト種別の名前は，末尾が必ず「List」でなければならない．"
+    },
+    {
+      "task_id": "block_0007_s3",
+      "source_span": "145-147",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "All lists use the required \"items\" field to contain the array of objects they return.",
+      "constraint": "All lists must use the required \"items\" field to contain the array of objects they return.",
+      "interpretation": "すべてのリストは，返却するオブジェクト配列を格納するために，必須フィールドである「items」を使用しなければならない．"
+    },
+    {
+      "task_id": "block_0007_s4",
+      "source_span": "145-147",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "All lists use the required \"items\" field to contain the array of objects they return. Any kind that has the \"items\" field must be a list kind.",
+      "constraint": "All lists must use the required \"items\" field to contain the array of objects they return, and any kind that has the \"items\" field must be a list kind.",
+      "interpretation": "すべてのリストは，返却するオブジェクト配列を必須の「items」フィールドに入れなければならず，「items」フィールドを持つ種別はリスト種別でなければならない．"
+    },
+    {
+      "task_id": "block_0008_s1",
+      "source_span": "149-152",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Most objects defined in the system should have an endpoint that returns the full set of resources, as well as zero or more endpoints that return subsets of the full list. Some objects may be singletons (the current user, the system defaults) and may not have lists.",
+      "constraint": "Most objects defined in the system should have an endpoint that returns the full set of resources and zero or more endpoints that return subsets of the full list, while singleton objects may not have lists.",
+      "interpretation": "システムで定義される多くのオブジェクトには，全リソース集合を返すエンドポイントと，必要に応じてその部分集合を返すエンドポイントを用意することが望ましい．ただし，現在のユーザーやシステム既定値のようなシングルトンはリストを持たなくてもよい．"
+    },
+    {
+      "task_id": "block_0009_s1",
+      "source_span": "154-157",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "In addition, all lists that return objects with labels should support label filtering (see the labels documentation), and most lists should support filtering by fields (see the fields documentation).",
+      "constraint": "All lists that return objects with labels should support label filtering, and most lists should support filtering by fields.",
+      "interpretation": "ラベル付きオブジェクトを返すすべてのリストはラベルによるフィルタリングをサポートすることが望ましく，多くのリストはフィールドによるフィルタリングをサポートすることが望ましい．"
+    },
+    {
+      "task_id": "block_0015_s2",
+      "source_span": "175-178",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Many simple resources are \"subresources\", which are rooted at API paths of specific resources. When resources wish to expose alternative actions or views that are closely coupled to a single resource, they should do so using new sub-resources.",
+      "constraint": "Resources that expose alternative actions or views closely coupled to a single resource should do so using new subresources rooted at API paths of specific resources.",
+      "interpretation": "単一リソースに密接に結び付いた代替アクションやビューを公開するリソースは，そのリソース固有のAPIパス配下に置かれる新しいサブリソースとして公開することが望ましい．"
+    },
+    {
+      "task_id": "block_0017_s3",
+      "source_span": "183-189",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "`/status`: Used to write just the `status` portion of a resource. For example, the `/pods` endpoint only allows updates to `metadata` and `spec`, since those reflect end-user intent. An automated process should be able to modify status for users to see by sending an updated Pod kind to the server to the \"/pods/&lt;name&gt;/status\" endpoint - the alternate endpoint allows different rules to be applied to the update, and access to be appropriately restricted.",
+      "constraint": "An automated process should be able to modify the status portion of a resource by sending an updated resource kind to the resource's \"/status\" endpoint, allowing different update rules and appropriately restricted access.",
+      "interpretation": "自動化されたプロセスは，対象リソースの「/status」エンドポイントへ更新済みリソース種別を送ることで，リソースのstatus部分を変更できることが望ましい．この別エンドポイントにより，通常更新とは異なるルールと適切に制限されたアクセスを適用できる．"
+    },
+    {
+      "task_id": "block_0020_s1",
+      "source_span": "197-200",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The standard REST verbs (defined below) MUST return singular JSON objects.",
+      "constraint": "The standard REST verbs must return singular JSON objects.",
+      "interpretation": "標準REST動詞は，単一のJSONオブジェクトを返さなければならない．"
+    },
+    {
+      "task_id": "block_0022_s2",
+      "source_span": "212-213",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The term \"kind\" is reserved for these \"top-level\" API types. The term \"type\" should be used for distinguishing sub-categories within objects or subobjects.",
+      "constraint": "The term \"kind\" should be reserved for top-level API types, and the term \"type\" should be used for distinguishing subcategories within objects or subobjects.",
+      "interpretation": "「kind」という用語はトップレベルAPI型のために予約しておくことが望ましく，オブジェクトまたはサブオブジェクト内の下位分類を区別する場合は「type」を使用することが望ましい．"
+    },
+    {
+      "task_id": "block_0023_s1",
+      "source_span": "217-217",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "All JSON objects returned by an API MUST have the following fields: kind: a string that identifies the schema this object should have apiVersion: a string that identifies the version of the schema the object should have",
+      "constraint": "All JSON objects returned by an API must have a \"kind\" string field that identifies the schema the object should have and an \"apiVersion\" string field that identifies the version of the schema the object should have.",
+      "interpretation": "APIが返すすべてのJSONオブジェクトは，そのオブジェクトが従うべきスキーマを識別する文字列フィールド「kind」と，そのスキーマのバージョンを識別する文字列フィールド「apiVersion」を持たなければならない．"
+    },
+    {
+      "task_id": "block_0024_s1",
+      "source_span": "219-219",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All JSON objects returned by an API MUST have the following fields: kind: a string that identifies the schema this object should have",
+      "constraint": "All JSON objects returned by an API should have a \"kind\" string field that identifies the schema the object should have.",
+      "interpretation": "APIが返すすべてのJSONオブジェクトは，そのオブジェクトが従うべきスキーマを識別する文字列フィールド「kind」を持つことが望ましい．"
+    },
+    {
+      "task_id": "block_0025_s1",
+      "source_span": "220-221",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All JSON objects returned by an API MUST have the following fields: apiVersion: a string that identifies the version of the schema the object should have",
+      "constraint": "All JSON objects returned by an API should have an \"apiVersion\" string field that identifies the version of the schema the object should have.",
+      "interpretation": "APIが返すすべてのJSONオブジェクトは，そのオブジェクトが従うべきスキーマのバージョンを識別する文字列フィールド「apiVersion」を持つことが望ましい．"
+    },
+    {
+      "task_id": "block_0026_s1",
+      "source_span": "223-225",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "These fields are required for proper decoding of the object.",
+      "constraint": "The \"kind\" and \"apiVersion\" fields are required for proper decoding of the object.",
+      "interpretation": "オブジェクトを正しくデコードするために，「kind」と「apiVersion」フィールドは必須である．"
+    },
+    {
+      "task_id": "block_0027_s1",
+      "source_span": "231-232",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Every object kind MUST have the following metadata in a nested object field called \"metadata\": namespace: a namespace is a DNS compatible label that objects are subdivided into. The default namespace is 'default'. See the namespace docs for more. name: a string that uniquely identifies this object within the current namespace (see the identifiers docs). This value is used in the path when retrieving an individual object. uid: a unique in time and space value (typically an RFC 4122 generated identifier, see the identifiers docs) used to distinguish between objects with the same name that have been deleted and recreated",
+      "constraint": "Every object kind must have a nested \"metadata\" object field containing \"namespace\", a DNS-compatible label subdividing objects with default value \"default\"; \"name\", a string that uniquely identifies the object within the current namespace and is used in the path when retrieving an individual object; and \"uid\", a unique-in-time-and-space value used to distinguish between objects with the same name that have been deleted and recreated.",
+      "interpretation": "すべてのオブジェクト種別は，ネストされた「metadata」オブジェクトを持ち，その中に「namespace」「name」「uid」を含めなければならない．「namespace」はオブジェクトを分割するDNS互換ラベルで既定値は「default」，「name」は現在のnamespace内でオブジェクトを一意に識別し個別取得時のパスに使われる文字列，「uid」は削除後に同じ名前で再作成されたオブジェクトを区別するための時空間的に一意な値である．"
+    },
+    {
+      "task_id": "block_0031_s1",
+      "source_span": "245-246",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Every object SHOULD have the following metadata in a nested object field called \"metadata\": resourceVersion: a string that identifies the internal version of this object that can be used by clients to determine when objects have changed. This value MUST be treated as opaque by clients and passed unmodified back to the server. Clients should not assume that the resource version has meaning across namespaces, different kinds of resources, or different servers. (See concurrency control, below, for more details.) generation: a sequence number representing a specific generation of the desired state. Set by the system and monotonically increasing, per-resource. May be compared, such as for RAW and WAW consistency. creationTimestamp: a string representing an RFC 3339 date of the date and time an object was created deletionTimestamp: a string representing an RFC 3339 date of the date and time after which this resource will be deleted. This field is set by the server when a graceful deletion is requested by the user, and is not directly settable by a client. The resource will be deleted (no longer visible from resource lists, and not reachable by name) after the time in this field except when the object has a finalizer set. In case the finalizer is set the deletion of the object is postponed at least until the finalizer is removed. Once the deletionTimestamp is set, this value may not be unset or be set further into the future, although it may be shortened or the resource may be deleted prior to this time. labels: a map of string keys and values that can be used to organize and categorize objects (see the labels docs) annotations: a map of string keys and values that can be used by external tooling to store and retrieve arbitrary metadata about this object (see the annotations docs)",
+      "constraint": "Every object should have a nested \"metadata\" object field containing \"resourceVersion\", a string that identifies the internal version of the object for clients to determine when objects have changed and that clients must treat as opaque and pass unmodified back to the server without assuming meaning across namespaces, resource kinds, or servers; \"generation\", a system-set monotonically increasing per-resource sequence number representing a specific generation of desired state; \"creationTimestamp\", an RFC 3339 date-time string for when the object was created; \"deletionTimestamp\", an RFC 3339 date-time string set by the server for the time after which the resource will be deleted, not directly settable by clients, not unsettable or extendable once set, but shorten-able or deletable before that time, with deletion postponed at least until any finalizer is removed; \"labels\", a map of string keys and values for organizing and categorizing objects; and \"annotations\", a map of string keys and values for external tooling to store and retrieve arbitrary metadata about the object.",
+      "interpretation": "すべてのオブジェクトは，ネストされた「metadata」オブジェクト内に，「resourceVersion」「generation」「creationTimestamp」「deletionTimestamp」「labels」「annotations」を持つことが望ましい．「resourceVersion」は変更検出用の内部バージョンで，クライアントは不透明値として未変更のままサーバーへ返し，namespace，リソース種別，サーバーをまたぐ意味を仮定しない．「generation」はシステムが設定するリソース単位の単調増加する望ましい状態の世代番号，「creationTimestamp」は作成日時のRFC 3339文字列，「deletionTimestamp」は削除予定時刻のRFC 3339文字列で，サーバーが設定しクライアントは直接設定できず，一度設定されたら解除や将来方向への延長はできないが，短縮やその時刻前の削除はでき，finalizerがある場合は少なくともその削除まで削除が延期される．「labels」は整理と分類のための文字列キー値マップ，「annotations」は外部ツールが任意メタデータを保存取得するための文字列キー値マップである．"
+    },
+    {
+      "task_id": "block_0032_s2",
+      "source_span": "248-254",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "resourceVersion: a string that identifies the internal version of this object that can be used by clients to determine when objects have changed. This value MUST be treated as opaque by clients and passed unmodified back to the server.",
+      "constraint": "Clients must treat \"resourceVersion\" as opaque and pass it unmodified back to the server.",
+      "interpretation": "クライアントは「resourceVersion」を不透明な値として扱い，変更せずにサーバーへ返さなければならない．"
+    },
+    {
+      "task_id": "block_0032_s3",
+      "source_span": "248-254",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "resourceVersion: a string that identifies the internal version of this object that can be used by clients to determine when objects have changed. This value MUST be treated as opaque by clients and passed unmodified back to the server. Clients should not assume that the resource version has meaning across namespaces, different kinds of resources, or different servers.",
+      "constraint": "Clients should not assume that \"resourceVersion\" has meaning across namespaces, different kinds of resources, or different servers.",
+      "interpretation": "クライアントは，「resourceVersion」がnamespace，異なるリソース種別，または異なるサーバーをまたいで意味を持つと仮定しないことが望ましい．"
+    },
+    {
+      "task_id": "block_0040_s2",
+      "source_span": "293-299",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The `status` summarizes the current state of the object in the system, and is usually persisted with the object by automated processes but may be generated on the fly. As a general guideline, fields in `status` should be the most recent observations of actual state, but they may contain information such as the results of allocations or similar operations which are executed in response to the object's `spec`.",
+      "constraint": "Fields in \"status\" should be the most recent observations of actual state, but may contain information such as results of allocations or similar operations executed in response to the object's \"spec\".",
+      "interpretation": "「status」のフィールドは，実際の状態に関する最新の観測結果であることが望ましい．ただし，オブジェクトの「spec」に応じて実行された割り当てなどの処理結果を含んでもよい．"
+    },
+    {
+      "task_id": "block_0041_s1",
+      "source_span": "301-304",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Types with both `spec` and `status` stanzas can (and usually should) have distinct authorization scopes for them. This allows users to be granted full write access to `spec` and read-only access to status, while relevant controllers are granted read-only access to `spec` but full write access to status.",
+      "constraint": "Types with both \"spec\" and \"status\" stanzas should have distinct authorization scopes for \"spec\" and \"status\".",
+      "interpretation": "「spec」と「status」の両方を持つ型では，「spec」と「status」に別々の認可スコープを設けることが望ましい．"
+    },
+    {
+      "task_id": "block_0042_s4",
+      "source_span": "306-313",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The system will drive toward the most recent `spec` regardless of previous versions of that stanza. For example, if a value is changed from 2 to 5 in one PUT and then back down to 3 in another PUT the system is not required to 'touch base' at 5 before changing the `status` to 3. In other words, the system's behavior is *level-based* rather than *edge-based*.",
+      "constraint": "The system must drive toward the most recent \"spec\" regardless of previous versions of that stanza, making system behavior level-based rather than edge-based.",
+      "interpretation": "システムは，以前の「spec」版に関係なく最新の「spec」に向かって動作しなければならない．つまり，途中の変更値を必ず経由するエッジベースではなく，最新の望ましい状態に基づくレベルベースの動作でなければならない．"
+    },
+    {
+      "task_id": "block_0043_s2",
+      "source_span": "315-320",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The Kubernetes API also serves as the foundation for the declarative configuration schema for the system. In order to facilitate level-based operation and expression of declarative configuration, fields in the specification should have declarative rather than imperative names and semantics -- they represent the desired state, not actions intended to yield the desired state.",
+      "constraint": "Fields in the specification should have declarative rather than imperative names and semantics because they represent desired state, not actions intended to yield desired state.",
+      "interpretation": "仕様内のフィールドは，望ましい状態を表すものであり，その状態に到達するためのアクションを表すものではないため，命令的ではなく宣言的な名前と意味を持つことが望ましい．"
+    },
+    {
+      "task_id": "block_0044_s1",
+      "source_span": "322-325",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The PUT and POST verbs on objects MUST ignore the `status` values, to avoid accidentally overwriting the `status` in read-modify-write scenarios.",
+      "constraint": "The PUT and POST verbs on objects must ignore \"status\" values to avoid accidentally overwriting \"status\" in read-modify-write scenarios.",
+      "interpretation": "オブジェクトに対するPUTとPOSTは，read-modify-write時に「status」を誤って上書きしないよう，「status」値を無視しなければならない．"
+    },
+    {
+      "task_id": "block_0044_s2",
+      "source_span": "322-325",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The PUT and POST verbs on objects MUST ignore the `status` values, to avoid accidentally overwriting the `status` in read-modify-write scenarios. A `/status` subresource MUST be provided to enable system components to update statuses of resources they manage.",
+      "constraint": "The PUT and POST verbs on objects must ignore \"status\" values to avoid accidentally overwriting \"status\" in read-modify-write scenarios, and a \"/status\" subresource must be provided to enable system components to update statuses of resources they manage.",
+      "interpretation": "オブジェクトに対するPUTとPOSTは，read-modify-write時に「status」を誤って上書きしないよう「status」値を無視しなければならない．また，管理対象リソースのstatusをシステムコンポーネントが更新できるように，「/status」サブリソースを提供しなければならない．"
+    },
+    {
+      "task_id": "block_0046_s1",
+      "source_span": "337-340",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All objects that represent a physical resource whose state may vary from the user's desired intent SHOULD have a `spec` and a `status`. Objects whose state cannot vary from the user's desired intent MAY have only `spec`, and MAY rename `spec` to a more appropriate name.",
+      "constraint": "All objects that represent a physical resource whose state may vary from the user's desired intent should have a \"spec\" and a \"status\", while objects whose state cannot vary from the user's desired intent may have only \"spec\" and may rename \"spec\" to a more appropriate name.",
+      "interpretation": "ユーザーの望む意図と実際の状態が異なり得る物理リソースを表すオブジェクトは，「spec」と「status」を持つことが望ましい．実際の状態がユーザーの意図から変化し得ないオブジェクトは，「spec」だけを持ってもよく，「spec」をより適切な名前に変更してもよい．"
+    },
+    {
+      "task_id": "block_0047_s1",
+      "source_span": "342-343",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Objects that contain both `spec` and `status` should not contain additional top-level fields other than the standard metadata fields.",
+      "constraint": "Objects that contain both \"spec\" and \"status\" should not contain additional top-level fields other than the standard metadata fields.",
+      "interpretation": "「spec」と「status」の両方を含むオブジェクトは，標準メタデータフィールド以外の追加トップレベルフィールドを含まないことが望ましい．"
+    },
+    {
+      "task_id": "block_0049_s3",
+      "source_span": "354-363",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Conditions provide a standard mechanism for higher-level status reporting from a controller. They are an extension mechanism which allows tools and other controllers to collect summary information about resources without needing to understand resource-specific status details. Conditions should complement more detailed information about the observed status of an object written by a controller, rather than replace it. For example, the \"Available\" condition of a Deployment can be determined by examining `readyReplicas`, `replicas`, and other properties of the Deployment. However, the \"Available\" condition allows other components to avoid duplicating the availability logic in the Deployment controller.",
+      "constraint": "Conditions should provide higher-level status reporting from a controller, allow tools and other controllers to collect summary information about resources without understanding resource-specific status details, and complement rather than replace more detailed observed status information written by the controller.",
+      "interpretation": "Condition は，controller からの高レベルな status 報告として使い，resource 固有の status 詳細を理解しなくても tools や他の controller が summary 情報を収集できるようにするべきである．また，controller が書く詳細な observed status を置き換えるのではなく，それを補完するものとして扱う．"
+    },
+    {
+      "task_id": "block_0050_s3",
+      "source_span": "365-368",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Objects may report multiple conditions, and new types of conditions may be added in the future or by 3rd party controllers. Therefore, conditions are represented using a list/slice of objects, where each condition has a similar structure. This collection should be treated as a map with a key of `type`.",
+      "constraint": "Conditions should be represented as a list or slice of similarly structured condition objects and treated as a map keyed by `type`, because objects may report multiple conditions and new condition types may be added in the future or by third-party controllers.",
+      "interpretation": "Object は複数の condition を報告でき，将来または third-party controller により新しい condition type が追加され得るため，conditions は同様の構造を持つ condition object の list/slice として表現し，`type` を key とする map として扱うべきである．"
+    },
+    {
+      "task_id": "block_0052_s1",
+      "source_span": "372-376",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Conditions should be added to explicitly convey properties that users and components care about rather than requiring those properties to be inferred from other observations. Once defined, the meaning of a Condition can not be changed arbitrarily - it becomes part of the API, and has the same backwards- and forwards-compatibility concerns of any other part of the API.",
+      "constraint": "Conditions should explicitly convey properties that users and components care about instead of requiring those properties to be inferred from other observations, and once a Condition is defined its meaning cannot be changed arbitrarily because it is part of the API with the same backward- and forward-compatibility concerns as any other API part.",
+      "interpretation": "Condition は，users や components が関心を持つ property を他の observations から推論させるのではなく明示的に伝えるために追加するべきである．一度定義された Condition の意味は API の一部となるため，後方互換性と前方互換性の観点から任意に変更してはならない．"
+    },
+    {
+      "task_id": "block_0053_s1",
+      "source_span": "378-381",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Controllers should apply their conditions to a resource the first time they visit the resource, even if the `status` is Unknown.",
+      "constraint": "Controllers should apply their conditions to a resource the first time they visit the resource, even when the condition `status` is `Unknown`.",
+      "interpretation": "Controller は，resource を初めて処理するときに，condition `status` が `Unknown` であっても，その resource に condition を設定するべきである．"
+    },
+    {
+      "task_id": "block_0054_s2",
+      "source_span": "383-387",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "For known conditions, the absence of a condition `status` should be interpreted the same as `Unknown`, and typically indicates that reconciliation has not yet finished (or that the resource state may not yet be observable).",
+      "constraint": "For known conditions, an absent condition `status` should be interpreted the same as `Unknown` and should typically indicate that reconciliation has not yet finished or that the resource state may not yet be observable.",
+      "interpretation": "既知の condition について condition `status` が存在しない場合は，`Unknown` と同じ意味として解釈するべきである．これは通常，reconciliation がまだ完了していない，または resource state がまだ観測可能でないことを示す．"
+    },
+    {
+      "task_id": "block_0056_s1",
+      "source_span": "396-401",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Condition type names should make sense for humans; neither positive nor negative polarity can be recommended as a general rule. A negative condition like \"MemoryExhausted\" may be easier for humans to understand than \"SufficientMemory\". Conversely, \"Ready\" or \"Succeeded\" may be easier to understand than \"Failed\", because \"Failed=Unknown\" or \"Failed=False\" may cause double-negative confusion.",
+      "constraint": "Condition type names should be understandable to humans, with neither positive nor negative polarity recommended as a general rule, and should avoid forms that create double-negative confusion for `Unknown` or `False` values.",
+      "interpretation": "Condition type 名は人間にとって理解しやすいものにするべきであり，positive polarity と negative polarity のどちらかを一般規則として推奨するものではない．`Unknown` や `False` と組み合わせたときに二重否定の混乱を生む名前は避けるべきである．"
+    },
+    {
+      "task_id": "block_0057_s1",
+      "source_span": "403-408",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Condition type names should describe the current observed state of the resource, rather than describing the current state transitions.",
+      "constraint": "Condition type names should describe the current observed state of the resource rather than current state transitions.",
+      "interpretation": "Condition type 名は，resource の現在の observed state を表すべきであり，現在進行中の state transition を表す名前にするべきではない．"
+    },
+    {
+      "task_id": "block_0057_s2",
+      "source_span": "403-408",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Condition type names should describe the current observed state of the resource, rather than describing the current state transitions. This typically means that the name should be an adjective (\"Ready\", \"OutOfDisk\") or a past-tense verb (\"Succeeded\", \"Failed\") rather than a present-tense verb (\"Deploying\").",
+      "constraint": "Condition type names should describe the current observed state of the resource rather than current state transitions, typically using an adjective such as `Ready` or `OutOfDisk` or a past-tense verb such as `Succeeded` or `Failed` rather than a present-tense verb such as `Deploying`.",
+      "interpretation": "Condition type 名は，resource の現在の observed state を表すべきであり，通常は `Ready` や `OutOfDisk` のような adjective，または `Succeeded` や `Failed` のような past-tense verb を使う．`Deploying` のような present-tense verb で state transition を表す名前は避ける．"
+    },
+    {
+      "task_id": "block_0058_s2",
+      "source_span": "410-418",
+      "source_strength": [
+        "recommendation",
+        "prohibition"
+      ],
+      "original": "For state transitions which take a long period of time (e.g. more than 1 minute), it is reasonable to treat the transition itself as an observed state. In these cases, the Condition (such as \"Resizing\") itself should not be transient, and should instead be signalled using the `True`/`False`/`Unknown` pattern.",
+      "constraint": "For state transitions that take a long period of time, such as more than one minute, treating the transition itself as an observed state is reasonable, but the Condition representing that transition should not be transient and should instead be signaled using the `True`/`False`/`Unknown` pattern.",
+      "interpretation": "1分を超えるような長時間の state transition は，transition 自体を observed state として扱ってよい．ただし，その transition を表す Condition は一時的なものにせず，`True`/`False`/`Unknown` パターンで通知するべきである．"
+    },
+    {
+      "task_id": "block_0058_s4",
+      "source_span": "410-418",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "For state transitions which take a long period of time (e.g. more than 1 minute), it is reasonable to treat the transition itself as an observed state. In cases where the state transition is unable to complete and continued reconciliation is not feasible, the Reason and Message should be used to indicate that the transition failed.",
+      "constraint": "For state transitions that take a long period of time, such as more than one minute, treating the transition itself as an observed state is reasonable, and when the state transition cannot complete and continued reconciliation is not feasible, `Reason` and `Message` should indicate that the transition failed.",
+      "interpretation": "1分を超えるような長時間の state transition は，transition 自体を observed state として扱ってよい．その transition が完了できず，継続的な reconciliation が実行可能でない場合は，`Reason` と `Message` により transition が失敗したことを示すべきである．"
+    },
+    {
+      "task_id": "block_0060_s1",
+      "source_span": "426-427",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Conditions should follow the standard schema included in k8s.io/apimachinery/pkg/apis/meta/v1/types.go.",
+      "constraint": "Conditions should follow the standard schema included in `k8s.io/apimachinery/pkg/apis/meta/v1/types.go`.",
+      "interpretation": "Conditions は，`k8s.io/apimachinery/pkg/apis/meta/v1/types.go` に含まれる standard schema に従うべきである．"
+    },
+    {
+      "task_id": "block_0060_s2",
+      "source_span": "426-427",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Conditions should follow the standard schema included in k8s.io/apimachinery/pkg/apis/meta/v1/types.go. It should be included as a top level element in status, similar to",
+      "constraint": "Conditions should follow the standard schema included in `k8s.io/apimachinery/pkg/apis/meta/v1/types.go` and should be included as a top-level element in `status`.",
+      "interpretation": "Conditions は，`k8s.io/apimachinery/pkg/apis/meta/v1/types.go` に含まれる standard schema に従い，`status` の top-level element として含めるべきである．"
+    },
+    {
+      "task_id": "block_0063_s1",
+      "source_span": "470-470",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Use of the `Reason` field is required.",
+      "constraint": "The `Reason` field must be used.",
+      "interpretation": "`Reason` field は必ず使用しなければならない．"
+    },
+    {
+      "task_id": "block_0064_s1",
+      "source_span": "472-473",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Condition types should be named in PascalCase.",
+      "constraint": "Condition types should be named in PascalCase.",
+      "interpretation": "Condition type は PascalCase で命名するべきである．"
+    },
+    {
+      "task_id": "block_0064_s2",
+      "source_span": "472-473",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Short condition names are preferred (e.g. \"Ready\" over \"MyResourceReady\").",
+      "constraint": "Condition names should be short, such as `Ready` instead of `MyResourceReady`.",
+      "interpretation": "Condition 名は短くするべきであり，例えば `MyResourceReady` ではなく `Ready` のような名前を優先する．"
+    },
+    {
+      "task_id": "block_0065_s2",
+      "source_span": "475-477",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Condition `status` values may be `True`, `False`, or `Unknown`. The absence of a condition should be interpreted the same as `Unknown`.",
+      "constraint": "Condition `status` values may be `True`, `False`, or `Unknown`, and the absence of a condition should be interpreted the same as `Unknown`.",
+      "interpretation": "Condition `status` の値は `True`，`False`，または `Unknown` を取り得る．Condition が存在しない場合は，`Unknown` と同じ意味として解釈するべきである．"
+    },
+    {
+      "task_id": "block_0067_s3",
+      "source_span": "482-487",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "In general, condition values may change back and forth, but some condition transitions may be monotonic, depending on the resource and condition type. However, conditions are observations and not, themselves, state machines, nor do we define comprehensive state machines for objects, nor behaviors associated with state transitions. The system is level-based rather than edge-triggered, and should assume an Open World.",
+      "constraint": "The system should treat conditions as level-based observations in an Open World, where condition values may change back and forth and some condition transitions may be monotonic depending on the resource and condition type, rather than treating conditions as state machines or defining comprehensive object state machines or state-transition behaviors.",
+      "interpretation": "Conditions は state machine ではなく level-based な observations として扱い，system は Open World を前提とするべきである．Condition 値は行き来し得るが，resource と condition type によっては一部の transition が monotonic になる場合もある．包括的な object state machine や state transition に紐づく behavior を定義するものではない．"
+    },
+    {
+      "task_id": "block_0069_s2",
+      "source_span": "496-508",
+      "source_strength": [
+        "deprecation"
+      ],
+      "original": "Some resources in the v1 API contain fields called `phase`, and associated `message`, `reason`, and other status fields. The pattern of using `phase` is deprecated.",
+      "constraint": "The pattern of using `phase` fields and associated `message`, `reason`, and other status fields in resources is deprecated.",
+      "interpretation": "Resource に `phase` field とそれに関連する `message`，`reason`，その他の status field を使う pattern は deprecated である．"
+    },
+    {
+      "task_id": "block_0069_s3",
+      "source_span": "496-508",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Some resources in the v1 API contain fields called `phase`, and associated `message`, `reason`, and other status fields. Newer API types should use conditions instead. Phase was essentially a state-machine enumeration field, that contradicted system-design principles and hampered evolution, since adding new enum values breaks backward compatibility. Rather than encouraging clients to infer implicit properties from phases, we prefer to explicitly expose the individual conditions that clients need to monitor. Conditions also have the benefit that it is possible to create some conditions with uniform meaning across all resource types, while still exposing others that are unique to specific resource types.",
+      "constraint": "Newer API types should use conditions instead of `phase` and associated status fields, explicitly exposing the individual conditions clients need to monitor rather than requiring clients to infer implicit properties from phase values.",
+      "interpretation": "新しい API type では，`phase` や関連する status field の代わりに conditions を使うべきである．Client に phase value から暗黙の property を推論させるのではなく，監視が必要な個別の conditions を明示的に公開する．"
+    },
+    {
+      "task_id": "block_0072_s1",
+      "source_span": "522-528",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Status information that may be large (especially proportional in size to collections of other resources, such as lists of references to other objects -- see below) and/or rapidly changing, such as resource usage, should be put into separate objects, with possibly a reference from the original object. This helps to ensure that GETs and watch remain reasonably efficient for the majority of clients, which may not need that data.",
+      "constraint": "Status information that may be large, especially when proportional to collections of other resources, and/or rapidly changing, such as resource usage, should be put into separate objects with possibly a reference from the original object so that GETs and watch remain reasonably efficient for clients that may not need that data.",
+      "interpretation": "他 resource の collection に比例して大きくなり得る status 情報や，resource usage のように急速に変化する status 情報は，必要に応じて元 object から参照できる separate object に置くべきである．これにより，その data を必要としない多くの clients に対して GET や watch の効率を保つ．"
+    },
+    {
+      "task_id": "block_0084_s1",
+      "source_span": "588-589",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Do not use numeric enums. Use aliases for string instead (e.g. `NodeConditionType`).",
+      "constraint": "Numeric enums must not be used; string aliases, such as `NodeConditionType`, should be used instead.",
+      "interpretation": "Numeric enum は使用してはならない．代わりに，`NodeConditionType` のような string alias を使用するべきである．"
+    },
+    {
+      "task_id": "block_0085_s1",
+      "source_span": "590-592",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "All public integer fields MUST use the Go `int32` or Go `int64` types, not `int` (which is ambiguously sized, depending on target platform).",
+      "constraint": "All public integer fields must use the Go `int32` or Go `int64` types rather than the ambiguously sized Go `int` type.",
+      "interpretation": "Public な integer field はすべて，target platform によって size が曖昧な Go の `int` ではなく，Go の `int32` または `int64` を使用しなければならない．"
+    },
+    {
+      "task_id": "block_0087_s1",
+      "source_span": "596-597",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Do not use unsigned integers, due to inconsistent support across languages and libraries. Just validate that the integer is non-negative if that's the case.",
+      "constraint": "Unsigned integers must not be used because support is inconsistent across languages and libraries; when an integer must be non-negative, validate that the integer is non-negative instead.",
+      "interpretation": "Unsigned integer は，言語や library 間で support が一貫しないため使用してはならない．非負である必要がある integer については，unsigned 型を使うのではなく，値が non-negative であることを validation する．"
+    },
+    {
+      "task_id": "block_0088_s1",
+      "source_span": "598-602",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All numbers (e.g. `int32`, `int64`) are converted to `float64` by Javascript and some other languages, so any field which is expected to exceed that either in magnitude or in precision (e.g. integer values > 53 bits) should be serialized and accepted as strings.",
+      "constraint": "Any numeric field expected to exceed `float64` limits in magnitude or precision, such as integer values greater than 53 bits, should be serialized and accepted as strings because JavaScript and some other languages convert numbers such as `int32` and `int64` to `float64`.",
+      "interpretation": "JavaScript や一部の言語では `int32` や `int64` などの number が `float64` に変換されるため，magnitude または precision が `float64` の限界を超える可能性がある numeric field，例えば 53 bits を超える integer value は，string として serialize し，string として受け付けるべきである．"
+    },
+    {
+      "task_id": "block_0088_s2",
+      "source_span": "598-602",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "`int64` fields must be bounds-checked to be within the range of `-(2^53) < x < (2^53)`.",
+      "constraint": "`int64` fields must be bounds-checked to be within the range `-(2^53) < x < (2^53)`.",
+      "interpretation": "`int64` field は，値が `-(2^53) < x < (2^53)` の範囲内であることを bounds-check しなければならない．"
+    },
+    {
+      "task_id": "block_0089_s1",
+      "source_span": "603-606",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Avoid floating-point values as much as possible, and never use them in spec. Floating-point values cannot be reliably round-tripped (encoded and re-decoded) without changing, and have varying precision and representations across languages and architectures.",
+      "constraint": "Floating-point values should be avoided as much as possible and must never be used in spec because floating-point values cannot be reliably round-tripped without changing and have varying precision and representations across languages and architectures.",
+      "interpretation": "浮動小数点値は，可能な限り避けるべきであり，spec では決して使用してはならない．理由は，エンコードと再デコードで値が変わらずに往復できる保証がなく，言語やアーキテクチャによって精度や表現が異なるためである．"
+    },
+    {
+      "task_id": "block_0091_s4",
+      "source_span": "614-623",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Some fields will have a list of allowed values (enumerations). These values will be strings, and they will be in CamelCase, with an initial uppercase letter. Examples: `ClusterFirst`, `Pending`, `ClientIP`. When an acronym or initialism each letter in the acronym should be uppercase, such as with `ClientIP` or `TCPDelay`.",
+      "constraint": "Enumeration values should be strings in CamelCase with an initial uppercase letter, and each letter in an acronym or initialism should be uppercase, as in `ClientIP` or `TCPDelay`.",
+      "interpretation": "列挙値は文字列で表し，先頭を大文字にした CamelCase にするべきである．頭字語やイニシャリズムを含む場合は，`ClientIP` や `TCPDelay` のように各文字を大文字にするべきである．"
+    },
+    {
+      "task_id": "block_0091_s5",
+      "source_span": "614-623",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Some fields will have a list of allowed values (enumerations). These values will be strings, and they will be in CamelCase, with an initial uppercase letter. Examples: `ClusterFirst`, `Pending`, `ClientIP`. When a proper name or the name of a command-line executable is used as a constant the proper name should be represented in consistent casing - examples: `systemd`, `iptables`, `IPVS`, `cgroupfs`, `Docker` (as a generic concept), `docker` (as the command-line executable).",
+      "constraint": "Enumeration values should be strings in CamelCase with an initial uppercase letter, and when a proper name or command-line executable name is used as a constant, the proper name or command-line executable name should be represented with consistent casing, such as `systemd`, `iptables`, `IPVS`, `cgroupfs`, `Docker` as a generic concept, or `docker` as the command-line executable.",
+      "interpretation": "列挙値は文字列で表し，先頭を大文字にした CamelCase にするべきである．固有名詞やコマンドライン実行ファイル名を定数として使う場合は，`systemd`，`iptables`，`IPVS`，`cgroupfs`，一般概念としての `Docker`，実行ファイルとしての `docker` のように，一貫した大文字小文字で表すべきである．"
+    },
+    {
+      "task_id": "block_0091_s6",
+      "source_span": "614-623",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Some fields will have a list of allowed values (enumerations). These values will be strings, and they will be in CamelCase, with an initial uppercase letter. Examples: `ClusterFirst`, `Pending`, `ClientIP`. When a proper name or the name of a command-line executable is used as a constant the proper name should be represented in consistent casing - examples: `systemd`, `iptables`, `IPVS`, `cgroupfs`, `Docker` (as a generic concept), `docker` (as the command-line executable). If a proper name is used which has mixed capitalization like `eBPF` that should be preserved in a longer constant such as `eBPFDelegation`.",
+      "constraint": "Enumeration values should be strings in CamelCase with an initial uppercase letter, and when a proper name with mixed capitalization such as `eBPF` is used in a longer constant, the mixed capitalization should be preserved, as in `eBPFDelegation`.",
+      "interpretation": "列挙値は文字列で表し，先頭を大文字にした CamelCase にするべきである．`eBPF` のような混在した大文字小文字を持つ固有名詞を長い定数に含める場合は，`eBPFDelegation` のようにその表記を保持するべきである．"
+    },
+    {
+      "task_id": "block_0092_s1",
+      "source_span": "625-632",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "All API within Kubernetes must leverage constants in this style, including flags and configuration files.",
+      "constraint": "All API within Kubernetes must use constants in this style, including flags and configuration files.",
+      "interpretation": "Kubernetes 内のすべての API は，フラグや設定ファイルを含め，指定された定数スタイルを使用しなければならない．"
+    },
+    {
+      "task_id": "block_0092_s2",
+      "source_span": "625-632",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Where inconsistent constants were previously used, new flags should be CamelCase only, and over time old flags should be updated to accept a CamelCase value alongside the inconsistent constant.",
+      "constraint": "Where inconsistent constants were previously used, new flags should use only CamelCase values, and old flags should eventually be updated to accept a CamelCase value alongside the inconsistent constant.",
+      "interpretation": "過去に一貫しない定数が使われていた箇所では，新しいフラグは CamelCase の値だけを使うべきである．既存の古いフラグは，将来的に従来の一貫しない定数に加えて CamelCase の値も受け付けるよう更新するべきである．"
+    },
+    {
+      "task_id": "block_0092_s4",
+      "source_span": "625-632",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Example: the Kubelet accepts a `--topology-manager-policy` flag that has values `none`, `best-effort`, `restricted`, and `single-numa-node`. This flag should accept `None`, `BestEffort`, `Restricted`, and `SingleNUMANode` going forward.",
+      "constraint": "The Kubelet `--topology-manager-policy` flag should accept `None`, `BestEffort`, `Restricted`, and `SingleNUMANode` going forward.",
+      "interpretation": "Kubelet の `--topology-manager-policy` フラグは，今後 `None`，`BestEffort`，`Restricted`，`SingleNUMANode` を受け付けるべきである．"
+    },
+    {
+      "task_id": "block_0092_s5",
+      "source_span": "625-632",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Where inconsistent constants were previously used, new flags should be CamelCase only, and over time old flags should be updated to accept a CamelCase value alongside the inconsistent constant. This flag should accept `None`, `BestEffort`, `Restricted`, and `SingleNUMANode` going forward. If new values are added to the flag, both forms should be supported.",
+      "constraint": "Where inconsistent constants were previously used, new flags should use only CamelCase values, old flags should eventually be updated to accept a CamelCase value alongside the inconsistent constant, the `--topology-manager-policy` flag should accept `None`, `BestEffort`, `Restricted`, and `SingleNUMANode` going forward, and any new values added to the flag should support both forms.",
+      "interpretation": "過去に一貫しない定数が使われていた場合，新しいフラグは CamelCase の値だけを使うべきであり，古いフラグは従来値に加えて CamelCase 値も受け付けるようにするべきである．`--topology-manager-policy` は `None`，`BestEffort`，`Restricted`，`SingleNUMANode` を受け付け，今後追加される値は両方の形式をサポートするべきである．"
+    },
+    {
+      "task_id": "block_0093_s3",
+      "source_span": "636-639",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Sometimes, at most one of a set of fields can be set. For example, the [volumes] field of a PodSpec has 17 different volume type-specific fields, such as `nfs` and `iscsi`. All fields in the set should be Optional.",
+      "constraint": "When at most one field in a set of fields can be set, all fields in the set should be Optional.",
+      "interpretation": "あるフィールド集合のうち最大 1 つだけを設定できる場合，その集合内のすべてのフィールドは Optional にするべきである．"
+    },
+    {
+      "task_id": "block_0094_s3",
+      "source_span": "641-645",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Sometimes, when a new type is created, the api designer may anticipate that a union will be needed in the future, even if only one field is allowed initially. In this case, be sure to make the field Optional In the validation, you may still return an error if the sole field is unset. Do not set a default value for that field.",
+      "constraint": "When a new type is created and the API designer anticipates that a union will be needed in the future even though only one field is initially allowed, the field should be Optional, validation may return an error if the sole field is unset, and a default value must not be set for that field.",
+      "interpretation": "新しい型を作成する際，将来 union が必要になると API 設計者が想定しており，初期状態では 1 つのフィールドだけが許可される場合，そのフィールドは Optional にするべきである．検証ではその唯一のフィールドが未設定ならエラーを返してもよいが，そのフィールドにデフォルト値を設定してはならない．"
+    },
+    {
+      "task_id": "block_0095_s1",
+      "source_span": "649-650",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Every list or simple kind SHOULD have the following metadata in a nested object field called \"metadata\": resourceVersion: a string that identifies the common version of the objects returned by in a list. This value MUST be treated as opaque by clients and passed unmodified back to the server. A resource version is only valid within a single namespace on a single kind of resource.",
+      "constraint": "Every list or simple kind should have a nested object field called `metadata` containing `resourceVersion`, a string identifying the common version of the objects returned in a list, which clients must treat as opaque and pass unmodified back to the server, and which is only valid within a single namespace on a single kind of resource.",
+      "interpretation": "すべての list kind または simple kind は，`metadata` というネストされたオブジェクトフィールドを持つべきであり，そこに `resourceVersion` を含めるべきである．`resourceVersion` はリストで返されたオブジェクト群の共通バージョンを識別する文字列で，クライアントは不透明な値として扱い，変更せずサーバーへ返さなければならず，単一 namespace かつ単一リソース kind の範囲でのみ有効である．"
+    },
+    {
+      "task_id": "block_0096_s2",
+      "source_span": "652-655",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "resourceVersion: a string that identifies the common version of the objects returned by in a list. This value MUST be treated as opaque by clients and passed unmodified back to the server.",
+      "constraint": "Clients must treat `resourceVersion`, a string identifying the common version of the objects returned in a list, as opaque and pass it unmodified back to the server.",
+      "interpretation": "クライアントは，リストで返されたオブジェクト群の共通バージョンを識別する文字列である `resourceVersion` を不透明な値として扱い，変更せずにサーバーへ返さなければならない．"
+    },
+    {
+      "task_id": "block_0097_s1",
+      "source_span": "657-661",
+      "source_strength": [
+        "obligation",
+        "recommendation"
+      ],
+      "original": "Every simple kind returned by the server, and any simple kind sent to the server that must support idempotency or optimistic concurrency should return this value.",
+      "constraint": "Every simple kind returned by the server, and any simple kind sent to the server that must support idempotency or optimistic concurrency, should return the resource version value.",
+      "interpretation": "サーバーから返されるすべての simple kind と，冪等性または楽観的並行制御をサポートする必要があるサーバー送信対象の simple kind は，resource version 値を返すべきである．"
+    },
+    {
+      "task_id": "block_0097_s2",
+      "source_span": "657-661",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Every simple kind returned by the server, and any simple kind sent to the server that must support idempotency or optimistic concurrency should return this value. Since simple resources are often used as input alternate actions that modify objects, the resource version of the simple resource should correspond to the resource version of the object.",
+      "constraint": "Every simple kind returned by the server, and any simple kind sent to the server that must support idempotency or optimistic concurrency, should return the resource version value, and because simple resources are often used as input alternate actions that modify objects, the resource version of the simple resource should correspond to the resource version of the object.",
+      "interpretation": "サーバーから返されるすべての simple kind と，冪等性または楽観的並行制御をサポートする必要があるサーバー送信対象の simple kind は，resource version 値を返すべきである．simple resource はオブジェクトを変更する代替アクションの入力として使われることが多いため，simple resource の resource version は対象オブジェクトの resource version に対応するべきである．"
+    },
+    {
+      "task_id": "block_0102_s1",
+      "source_span": "688-688",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "API resources should use the traditional REST pattern: GET /&lt;resourceNamePlural&gt; - Retrieve a list of type &lt;resourceName&gt;, e.g. GET /pods returns a list of Pods. POST /&lt;resourceNamePlural&gt; - Create a new resource from the JSON object provided by the client. GET /&lt;resourceNamePlural&gt;/&lt;name&gt; - Retrieves a single resource with the given name, e.g. GET /pods/first returns a Pod named 'first'. Should be constant time, and the resource should be bounded in size. DELETE /&lt;resourceNamePlural&gt;/&lt;name&gt; - Delete the single resource with the given name. DELETE /&lt;resourceNamePlural&gt; - Deletes a list of type &lt;resourceName&gt;, e.g. DELETE /pods a list of Pods. PUT /&lt;resourceNamePlural&gt;/&lt;name&gt; - Update or create the resource with the given name with the JSON object provided by the client. PATCH /&lt;resourceNamePlural&gt;/&lt;name&gt; - Selectively modify the specified fields of the resource. GET /&lt;resourceNamePlural&gt;&quest;watch=true - Receive a stream of JSON objects corresponding to changes made to any resource of the given kind over time.",
+      "constraint": "API resources should use the traditional REST pattern: `GET /<resourceNamePlural>` retrieves a list of type `<resourceName>`; `POST /<resourceNamePlural>` creates a new resource from the JSON object provided by the client; `GET /<resourceNamePlural>/<name>` retrieves a single resource with the given name, should be constant time, and should return a resource bounded in size; `DELETE /<resourceNamePlural>/<name>` deletes the single resource with the given name; `DELETE /<resourceNamePlural>` deletes a list of type `<resourceName>`; `PUT /<resourceNamePlural>/<name>` updates or creates the resource with the given name using the JSON object provided by the client; `PATCH /<resourceNamePlural>/<name>` selectively modifies the specified fields of the resource; and `GET /<resourceNamePlural>?watch=true` receives a stream of JSON objects corresponding to changes made over time to any resource of the given kind.",
+      "interpretation": "API リソースは従来の REST パターンを使うべきである．`GET /<resourceNamePlural>` は一覧取得，`POST /<resourceNamePlural>` はクライアント提供 JSON からの新規作成，`GET /<resourceNamePlural>/<name>` は指定名の単一リソース取得で，定数時間かつサイズが bounded なリソースを返すべきである．`DELETE /<resourceNamePlural>/<name>` は指定名の単一リソース削除，`DELETE /<resourceNamePlural>` は一覧削除，`PUT /<resourceNamePlural>/<name>` は指定名リソースの更新または作成，`PATCH /<resourceNamePlural>/<name>` は指定フィールドの選択的変更，`GET /<resourceNamePlural>?watch=true` は当該 kind のリソース変更に対応する JSON オブジェクトのストリーム受信を行う．"
+    },
+    {
+      "task_id": "block_0105_s2",
+      "source_span": "694-696",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "GET /&lt;resourceNamePlural&gt;/&lt;name&gt; - Retrieves a single resource with the given name, e.g. GET /pods/first returns a Pod named 'first'. Should be constant time, and the resource should be bounded in size.",
+      "constraint": "`GET /<resourceNamePlural>/<name>` should retrieve a single resource with the given name, should be constant time, and should return a resource bounded in size.",
+      "interpretation": "`GET /<resourceNamePlural>/<name>` は，指定された名前の単一リソースを取得するべきであり，定数時間で処理され，返すリソースのサイズは bounded であるべきである．"
+    },
+    {
+      "task_id": "block_0106_s2",
+      "source_span": "697-702",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "DELETE /&lt;resourceNamePlural&gt;/&lt;name&gt; - Delete the single resource with the given name. DeleteOptions may specify gracePeriodSeconds, the optional duration in seconds before the object should be deleted.",
+      "constraint": "`DELETE /<resourceNamePlural>/<name>` should delete the single resource with the given name, and `DeleteOptions` may specify `gracePeriodSeconds`, the optional duration in seconds before the object should be deleted.",
+      "interpretation": "`DELETE /<resourceNamePlural>/<name>` は，指定された名前の単一リソースを削除するべきである．`DeleteOptions` では，オブジェクトが削除されるまでの任意の秒数として `gracePeriodSeconds` を指定してもよい．"
+    },
+    {
+      "task_id": "block_0121_s1",
+      "source_span": "748-750",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Note: Due to unpredictable behavior when short names collide (with each other or with resource types), do not add new short names to built-in resources unless specifically allowed by API reviewers.",
+      "constraint": "New short names must not be added to built-in resources unless specifically allowed by API reviewers, due to unpredictable behavior when short names collide with each other or with resource types.",
+      "interpretation": "短縮名どうし，または短縮名とリソース型が衝突した場合に予測不能な挙動が起きるため，API レビュアーが明示的に許可した場合を除き，built-in resources に新しい short names を追加してはならない．"
+    },
+    {
+      "task_id": "block_0130_s1",
+      "source_span": "771-777",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Note: Due to inconsistent behavior when categories collide with resource types, and difficulties knowing when it is safe to add new resources to an existing category, do not add new categories to built-in resources unless specifically allowed by API reviewers.",
+      "constraint": "New categories must not be added to built-in resources unless specifically allowed by API reviewers, due to inconsistent behavior when categories collide with resource types and difficulties knowing when it is safe to add new resources to an existing category.",
+      "interpretation": "カテゴリとリソース型が衝突した場合の挙動が一貫せず，既存カテゴリへ新しいリソースを追加して安全か判断しにくいため，API レビュアーが明示的に許可した場合を除き，built-in resources に新しい categories を追加してはならない．"
+    },
+    {
+      "task_id": "block_0152_s1",
+      "source_span": "806-810",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "All compatible Kubernetes APIs MUST support \"name idempotency\" and respond with an HTTP status code 409 when a request is made to POST an object that has the same name as an existing object in the system.",
+      "constraint": "All compatible Kubernetes APIs must support name idempotency and respond with HTTP status code 409 when a request is made to POST an object that has the same name as an existing object in the system.",
+      "interpretation": "互換性のあるすべての Kubernetes API は name idempotency をサポートしなければならない．既存オブジェクトと同じ名前のオブジェクトを POST するリクエストが行われた場合，HTTP ステータスコード 409 で応答しなければならない．"
+    },
+    {
+      "task_id": "block_0153_s2",
+      "source_span": "812-822",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. GenerateName indicates that the name should be made unique by the server prior to persisting it.",
+      "constraint": "System-generated names may be requested using `metadata.generateName`, which indicates that the server should make the name unique before persisting it.",
+      "interpretation": "システム生成名は `metadata.generateName` を使って要求してもよい．これは，永続化前にサーバーが名前を一意にするべきであることを示す．"
+    },
+    {
+      "task_id": "block_0153_s3",
+      "source_span": "812-822",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. A non-empty value for the field indicates the server should attempt to make the name unique (and the name returned to the client will be different than the name passed).",
+      "constraint": "System-generated names may be requested using `metadata.generateName`, and a non-empty `metadata.generateName` value indicates that the server should attempt to make the name unique and that the name returned to the client will be different from the name passed.",
+      "interpretation": "システム生成名は `metadata.generateName` を使って要求してもよい．`metadata.generateName` が空でない場合，サーバーは名前を一意にしようとするべきであり，クライアントに返される名前は渡された名前とは異なる．"
+    },
+    {
+      "task_id": "block_0153_s5",
+      "source_span": "812-822",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. The value of this field will be combined with a random suffix on the server if the Name field has not been provided. The provided value must be valid within the rules for Name, and may be truncated by the length of the suffix.",
+      "constraint": "System-generated names may be requested using `metadata.generateName`, and if the `Name` field has not been provided, the server will combine the `metadata.generateName` value with a random suffix; the provided value must be valid within the rules for `Name` and may be truncated by the length of the suffix.",
+      "interpretation": "システム生成名は `metadata.generateName` を使って要求してもよい．`Name` フィールドが提供されていない場合，サーバーは `metadata.generateName` の値にランダムなサフィックスを結合する．提供された値は `Name` の規則内で有効でなければならず，サフィックスの長さ分だけ切り詰められることがある．"
+    },
+    {
+      "task_id": "block_0153_s6",
+      "source_span": "812-822",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Names generated by the system may be requested using `metadata.generateName`. The provided value must be valid within the rules for Name, and may be truncated by the length of the suffix. If this field is specified, and Name is not present, the server will return a 409 with Reason `AlreadyExists` if the generated name exists, and the client should retry (after waiting at least the amount of time indicated in the Retry-After header, if it is present).",
+      "constraint": "System-generated names may be requested using `metadata.generateName`, the provided value must be valid within the rules for `Name` and may be truncated by the length of the suffix, and if `metadata.generateName` is specified and `Name` is not present, the server will return a 409 with Reason `AlreadyExists` if the generated name exists, and the client should retry after waiting at least the amount of time indicated in the `Retry-After` header if it is present.",
+      "interpretation": "システム生成名は `metadata.generateName` を使って要求してもよく，提供値は `Name` の規則内で有効でなければならず，サフィックスの長さ分だけ切り詰められることがある．`metadata.generateName` が指定され `Name` がない場合，生成名が既に存在すればサーバーは Reason `AlreadyExists` の 409 を返し，クライアントは `Retry-After` ヘッダーがあれば少なくともその時間だけ待ってから再試行するべきである．"
+    },
+    {
+      "task_id": "block_0154_s1",
+      "source_span": "826-826",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Fields must be either optional or required.",
+      "constraint": "Fields must be either optional or required.",
+      "interpretation": "フィールドは optional または required のいずれかでなければならない．"
+    },
+    {
+      "task_id": "block_0155_s1",
+      "source_span": "828-829",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "A field that is required means that the writer must express an opinion about the value of the field.",
+      "constraint": "A required field must express the writer's opinion about the value of the field.",
+      "interpretation": "必須フィールドとは，そのフィールドの値について書き手が何らかの判断や選択を明示しなければならないフィールドである，という意味．"
+    },
+    {
+      "task_id": "block_0156_s2",
+      "source_span": "831-832",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "An optional field is one where the writer may choose to omit the field entirely. Readers should not assume that the field is present, unless the field also has a server-side default value.",
+      "constraint": "For an optional field, the writer may omit the field entirely, and readers should not assume that the field is present unless the field also has a server-side default value.",
+      "interpretation": "任意フィールドでは，書き手はフィールド自体を省略できる．読み手は，サーバー側のデフォルト値がある場合を除き，そのフィールドが存在すると仮定してはならない．"
+    },
+    {
+      "task_id": "block_0162_s1",
+      "source_span": "842-843",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The API server should allow POSTing and PUTing a resource with this field unset.",
+      "constraint": "The API server should allow POSTing and PUTing a resource with the optional field unset.",
+      "interpretation": "API サーバーは，任意フィールドが未設定のままでも，そのリソースの POST と PUT を受け入れるべきである．"
+    },
+    {
+      "task_id": "block_0163_s1",
+      "source_span": "845-849",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "When the field type has a built-in `nil` value, such as a map or a slice, and your use case means that you need to be able to distinguish between \"field not set\" and \"field set to an empty value\", you should use a pointer to the type, even though it has a built-in `nil` value.",
+      "constraint": "When a field type has a built-in `nil` value, such as a map or a slice, and the use case requires distinguishing between \"field not set\" and \"field set to an empty value\", the field should use a pointer to the type even though the type has a built-in `nil` value.",
+      "interpretation": "map や slice のように型自体に `nil` 値がある場合でも，用途上「未設定」と「空の値に設定済み」を区別する必要があるなら，そのフィールドはその型へのポインターとして定義するべきである．"
+    },
+    {
+      "task_id": "block_0164_s1",
+      "source_span": "851-854",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Note that for backward compatibility, any field that has the `omitempty` struct tag, and is not explicitly marked as `+required`, will be considered to be optional.",
+      "constraint": "For backward compatibility, any field that has the `omitempty` struct tag and is not explicitly marked as `+required` will be considered optional.",
+      "interpretation": "後方互換性のため，`omitempty` 構造体タグを持ち，かつ `+required` と明示されていないフィールドは，任意フィールドとして扱われる．"
+    },
+    {
+      "task_id": "block_0164_s2",
+      "source_span": "851-854",
+      "source_strength": [
+        "obligation",
+        "recommendation"
+      ],
+      "original": "Note that for backward compatibility, any field that has the `omitempty` struct tag, and is not explicitly marked as `+required`, will be considered to be optional. This is expected to change in the future, and new fields should explicitly set either an `+optional` or `+required` comment tag.",
+      "constraint": "For backward compatibility, any field that has the `omitempty` struct tag and is not explicitly marked as `+required` will be considered optional, and new fields should explicitly set either an `+optional` or `+required` comment tag because this behavior is expected to change in the future.",
+      "interpretation": "後方互換性のため，`omitempty` があり `+required` がないフィールドは任意扱いになる．ただしこの挙動は将来変わる見込みなので，新しいフィールドでは `+optional` または `+required` のコメントタグを明示するべきである．"
+    },
+    {
+      "task_id": "block_0167_s1",
+      "source_span": "859-859",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Required fields have the following properties: They mark themselves as required explicitly with a `+required` comment tag.",
+      "constraint": "Required fields must mark themselves as required explicitly with a `+required` comment tag.",
+      "interpretation": "必須フィールドは，`+required` コメントタグを使って，自分が必須であることを明示しなければならない．"
+    },
+    {
+      "task_id": "block_0168_s1",
+      "source_span": "860-861",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Required fields have the following properties: The API server should not allow POSTing or PUTing a resource with this field unset.",
+      "constraint": "The API server should not allow POSTing or PUTing a resource with a required field unset.",
+      "interpretation": "API サーバーは，必須フィールドが未設定のリソースについて，POST または PUT を許可するべきではない．"
+    },
+    {
+      "task_id": "block_0169_s1",
+      "source_span": "862-862",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Required fields have the following properties: They _typically_ do not use pointer types in the Go definition (e.g. `AnotherFlag SomeFlag`), though required fields where the zero value is a valid value must use pointer types, paired with an `omitempty` struct tag to avoid spurious null serializations.",
+      "constraint": "Required fields typically do not use pointer types in the Go definition, though required fields where the zero value is a valid value must use pointer types paired with an `omitempty` struct tag to avoid spurious null serializations.",
+      "interpretation": "必須フィールドは通常 Go 定義でポインター型を使わない．ただしゼロ値が有効な値である必須フィールドでは，不要な `null` シリアライズを避けるため，ポインター型と `omitempty` 構造体タグを併用しなければならない．"
+    },
+    {
+      "task_id": "block_0170_s1",
+      "source_span": "864-864",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "For more details on how to use pointers and `omitempty` with fields, see Serialization of optional/required fields.",
+      "constraint": "For more details on how to use pointers and `omitempty` with fields, read Serialization of optional/required fields.",
+      "interpretation": "フィールドでポインターと `omitempty` をどう使うかの詳細は，「Serialization of optional/required fields」を参照する，という案内である．"
+    },
+    {
+      "task_id": "block_0175_s1",
+      "source_span": "881-881",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "To determine whether a field should be a pointer, consider the following:",
+      "constraint": "To determine whether a field should be a pointer, consider the listed pointer-selection criteria.",
+      "interpretation": "フィールドをポインターにするべきか判断する際は，後続に列挙されたポインター選択基準を考慮するべきである．"
+    },
+    {
+      "task_id": "block_0178_s2",
+      "source_span": "895-895",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "For `bool` types, the zero value is `false`, which is always a valid user choice. `bool` types should always be pointers, and should always use the `omitempty` tag.",
+      "constraint": "Because the zero value for `bool` types is `false` and `false` is always a valid user choice, `bool` types should always be pointers and should always use the `omitempty` tag.",
+      "interpretation": "`bool` のゼロ値は `false` であり，`false` は常に有効なユーザー選択なので，`bool` フィールドは常にポインター型にし，常に `omitempty` タグを使うべきである．"
+    },
+    {
+      "task_id": "block_0179_s1",
+      "source_span": "896-896",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "When a field is required, and the zero value is not valid, a structured client who has not expressed an explicit choice will have their request rejected by the API server based on the invalid value, rather than the field being unset.",
+      "constraint": "When a field is required and the zero value is not valid, a structured client that has not expressed an explicit choice will have its request rejected by the API server based on the invalid value rather than based on the field being unset.",
+      "interpretation": "必須フィールドでゼロ値が無効な場合，明示的な選択をしていない構造化クライアントのリクエストは，フィールド未設定ではなく，無効な値に基づいて API サーバーに拒否される．"
+    },
+    {
+      "task_id": "block_0182_s1",
+      "source_span": "899-899",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "When a field is required, and the zero value is not valid, a structured client who has not expressed an explicit choice will have their request rejected by the API server based on the invalid value, rather than the field being unset. In these cases, not using `omitempty` provides the same result, but pollutes the marshaled object with zero values and is not recommended.",
+      "constraint": "When a field is required and the zero value is not valid, a structured client that has not expressed an explicit choice will have its request rejected by the API server based on the invalid value rather than based on the field being unset, and not using `omitempty` is not recommended because it provides the same result but pollutes the marshaled object with zero values.",
+      "interpretation": "必須フィールドでゼロ値が無効な場合，未選択の構造化クライアントは無効な値として拒否される．この場合 `omitempty` を使わなくても結果は同じだが，マーシャルされたオブジェクトにゼロ値が混入するため推奨されない．"
+    },
+    {
+      "task_id": "block_0183_s1",
+      "source_span": "900-900",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "For structs, the zero value can only be valid when the struct has no required fields, and does not require at least one property to be set.",
+      "constraint": "For structs, the zero value can be valid only when the struct has no required fields and does not require at least one property to be set.",
+      "interpretation": "struct のゼロ値が有効になり得るのは，その struct に必須フィールドがなく，かつ少なくとも 1 つのプロパティ設定を要求していない場合に限られる．"
+    },
+    {
+      "task_id": "block_0184_s1",
+      "source_span": "901-901",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "For structs, the zero value can only be valid when the struct has no required fields, and does not require at least one property to be set. Required structs should use `omitzero` to avoid marshalling the zero value.",
+      "constraint": "For structs, the zero value can be valid only when the struct has no required fields and does not require at least one property to be set, and required structs should use `omitzero` to avoid marshalling the zero value.",
+      "interpretation": "struct のゼロ値が有効になり得るのは，必須フィールドがなく，少なくとも 1 つのプロパティ設定も要求しない場合に限られる．必須 struct では，ゼロ値のマーシャリングを避けるため `omitzero` を使うべきである．"
+    },
+    {
+      "task_id": "block_0197_s1",
+      "source_span": "933-933",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Avoid designing APIs that require the distinction between unset and `null`.",
+      "constraint": "APIs should not require the distinction between unset and `null`.",
+      "interpretation": "API 設計では，未設定と `null` の区別を必要とする設計にするべきではない．"
+    },
+    {
+      "task_id": "block_0205_s1",
+      "source_span": "956-957",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Some care is required when deciding which mechanism to use and managing the semantics.",
+      "constraint": "Care is required when deciding which defaulting mechanism to use and when managing the defaulting semantics.",
+      "interpretation": "どのデフォルト設定メカニズムを使うかを決めるとき，またデフォルト設定の意味を管理するときには，注意が必要である．"
+    },
+    {
+      "task_id": "block_0207_s3",
+      "source_span": "967-974",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "In some cases, these values may be conditional on or deterministically derived from other fields (e.g. \"if otherField is X then this field defaults to 0\" or \"this field defaults to the value of otherField\"). Note that such derived defaults present a hazard in the face of updates - if the \"other\" field changes, the derived field may have to change, too. The static defaulting logic is unaware of updates and has no concept of \"previous value\", which means this inter-field relationship becomes the user's problem - they must update both the field they care about and the \"other\" field.",
+      "constraint": "When defaults are conditional on or deterministically derived from other fields, derived defaults present an update hazard because static defaulting logic is unaware of updates and has no concept of previous value, so the user must update both the field they care about and the other field.",
+      "interpretation": "デフォルト値が他フィールドに条件付き，または決定的に導出される場合，更新時に危険がある．静的デフォルト設定は更新や以前の値を知らないため，対象フィールドと関連する他フィールドの両方をユーザーが更新しなければならない．"
+    },
+    {
+      "task_id": "block_0210_s1",
+      "source_span": "991-994",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Static defaults are the best choice for values which are logically required, but which have a value that works well for most users.",
+      "constraint": "Static defaults are the best choice for values that are logically required but have a value that works well for most users.",
+      "interpretation": "静的デフォルトは，論理的には必須だが，多くのユーザーに適した値があるフィールドに最も適している．"
+    },
+    {
+      "task_id": "block_0210_s2",
+      "source_span": "991-994",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Static defaulting must not consider any state except the object being operated upon (and the complexity of Service API stands as an example of why).",
+      "constraint": "Static defaulting must not consider any state except the object being operated upon.",
+      "interpretation": "静的デフォルト設定は，操作対象のオブジェクト以外の状態を考慮してはならない．"
+    },
+    {
+      "task_id": "block_0213_s2",
+      "source_span": "1006-1012",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "In some cases, it is useful to set a default value which is not derived from the object in question. For example, when creating a PersistentVolumeClaim, the storage class must be specified.",
+      "constraint": "In some cases, it is useful to set a default value that is not derived from the object in question, such as specifying the storage class when creating a PersistentVolumeClaim.",
+      "interpretation": "対象オブジェクトから導出されないデフォルト値を設定することが有用な場合がある．例として，PersistentVolumeClaim を作成するときに storage class を指定する場合が挙げられる．"
+    },
+    {
+      "task_id": "block_0214_s2",
+      "source_span": "1014-1021",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Instead, we can provide a built-in admission controller or a MutatingWebhookConfiguration. Unlike static defaults, these may consider external state (such as annotations on StorageClass objects) when deciding default values, and must handle things like race conditions (e.g. a StorageClass is designated the default, but the admission controller has not yet seen that update).",
+      "constraint": "A built-in admission controller or a MutatingWebhookConfiguration may consider external state when deciding default values and must handle race conditions.",
+      "interpretation": "組み込み admission controller や MutatingWebhookConfiguration は，デフォルト値を決める際に外部状態を考慮してよいが，StorageClass の既定指定をまだ観測していないような競合状態を扱わなければならない．"
+    },
+    {
+      "task_id": "block_0214_s4",
+      "source_span": "1014-1021",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Instead, we can provide a built-in admission controller or a MutatingWebhookConfiguration. These admission controllers are strictly optional and can be disabled. As such, fields which are initialized this way must be strictly optional.",
+      "constraint": "Fields initialized by built-in admission controllers or a MutatingWebhookConfiguration must be strictly optional because these admission controllers are strictly optional and can be disabled.",
+      "interpretation": "組み込み admission controller や MutatingWebhookConfiguration は任意で無効化できるため，それらによって初期化されるフィールドは厳密に任意でなければならない．"
+    },
+    {
+      "task_id": "block_0217_s1",
+      "source_span": "1036-1040",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Like admission controlled defaults, these controllers may consider external state when deciding what values to set, must handle race conditions, and can be disabled.",
+      "constraint": "Controllers, like admission controlled defaults, may consider external state when deciding what values to set, must handle race conditions, and can be disabled.",
+      "interpretation": "コントローラーは，admission controlled defaults と同様に，設定する値を決める際に外部状態を考慮してよいが，競合状態を扱う必要があり，また無効化され得る．"
+    },
+    {
+      "task_id": "block_0217_s2",
+      "source_span": "1036-1040",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Like admission controlled defaults, these controllers may consider external state when deciding what values to set, must handle race conditions, and can be disabled. Fields which are initialized this way must be strictly optional (meaning observers will see the object without these fields set, and that is allowable and semantically correct).",
+      "constraint": "Controller-assigned defaulting controllers may consider external state when deciding what values to set, must handle race conditions, and can be disabled; fields initialized by controller-assigned defaulting must be strictly optional, so observing the object without those fields set is allowable and semantically correct.",
+      "interpretation": "コントローラーによるデフォルト設定は，設定値を決める際に外部状態を考慮してよいが，競合状態を扱えなければならず，無効化できる必要がある．この方式で初期化されるフィールドは厳密に任意であり，そのフィールドが未設定のオブジェクトを観測しても許容され，意味的に正しい．"
+    },
+    {
+      "task_id": "block_0218_s1",
+      "source_span": "1042-1044",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Like all controllers, care must be taken to not clobber unrelated fields or values (e.g. in an array).",
+      "constraint": "Controllers must take care not to clobber unrelated fields or values, including values in arrays.",
+      "interpretation": "コントローラーは，無関係なフィールドや値を上書きして壊さないよう注意しなければならない．配列内の値もこの対象に含まれる．"
+    },
+    {
+      "task_id": "block_0218_s2",
+      "source_span": "1042-1044",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Using one of the patch or apply mechanisms is recommended to facilitate composition and concurrency of controllers.",
+      "constraint": "Controllers should use one of the patch or apply mechanisms to facilitate composition and concurrency of controllers.",
+      "interpretation": "コントローラー同士の合成性と並行性を保ちやすくするため，コントローラーは patch または apply のいずれかの仕組みを使うべきである．"
+    },
+    {
+      "task_id": "block_0219_s1",
+      "source_span": "1048-1048",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All forms of defaulting should only make the following types of modifications: Setting previously unset fields Adding keys to maps Adding values to arrays which have mergeable semantics (`+listType=map` tag or `patchStrategy:\"merge\"` attribute in the type definition)",
+      "constraint": "All forms of defaulting should only set previously unset fields, add keys to maps, or add values to arrays that have mergeable semantics, such as a `+listType=map` tag or `patchStrategy:\"merge\"` attribute in the type definition.",
+      "interpretation": "すべてのデフォルト設定は，未設定フィールドの設定，マップへのキー追加，または `+listType=map` や `patchStrategy:\"merge\"` のようなマージ可能な意味を持つ配列への値追加に限るべきである．"
+    },
+    {
+      "task_id": "block_0223_s2",
+      "source_span": "1054-1055",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "In particular we never want to change or override a value that was provided by the user. If they requested something invalid, they should get an error.",
+      "constraint": "Defaulting should never change or override a value provided by the user; if the user requested something invalid, the user should get an error.",
+      "interpretation": "デフォルト設定は，ユーザーが指定した値を変更または上書きすべきではない．ユーザーの指定が不正な場合は，値を直すのではなくエラーを返すべきである．"
+    },
+    {
+      "task_id": "block_0228_s1",
+      "source_span": "1072-1076",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The goal is that, for a given input (e.g. YAML file), PUT on an existing object should produce the same result as if you used that input to create the object.",
+      "constraint": "For a given input, such as a YAML file, PUT on an existing object should produce the same result as using that input to create the object.",
+      "interpretation": "同じ入力，たとえば YAML ファイルを使う場合，既存オブジェクトへの PUT は，その入力でオブジェクトを作成した場合と同じ結果になるべきである．"
+    },
+    {
+      "task_id": "block_0228_s2",
+      "source_span": "1072-1076",
+      "source_strength": [
+        "recommendation",
+        "prohibition"
+      ],
+      "original": "Calling PUT a second time with the same input should be idempotent and should not change the resource.",
+      "constraint": "Calling PUT a second time with the same input should be idempotent and should not change the resource.",
+      "interpretation": "同じ入力で PUT を二度呼び出しても冪等であるべきであり，二度目の呼び出しでリソースが変更されるべきではない．"
+    },
+    {
+      "task_id": "block_0231_s1",
+      "source_span": "1095-1104",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "When adding a field with a static or admission controlled default, this must be considered. If the field is immutable after creation, consider adding logic to manually \"patch\" the value from the \"old\" object into the \"new\" one when it has been \"unset\", rather than returning an error or allocating a different value (e.g. Service IPs). This may require setting the default in a different way (e.g. in the registry code which understands updates instead of in the versioned defaulting code which does not). Be careful to detect and report legitimate errors where the \"new\" value is specified but is different from the \"old\" value.",
+      "constraint": "When adding a field with a static or admission-controlled default, if the field is immutable after creation, consider adding logic to manually patch the value from the old object into the new object when the value has been unset, rather than returning an error or allocating a different value; this may require setting the default in update-aware code such as registry code instead of versioned defaulting code, and legitimate errors must be detected and reported when the new value is specified but differs from the old value.",
+      "interpretation": "静的または admission 制御のデフォルトを持つフィールドを追加する場合，作成後に不変なフィールドでは，新しいオブジェクトで値が未設定なら，エラーにしたり別値を割り当てたりせず，古いオブジェクトの値を新しいオブジェクトへ手動で patch するロジックを検討する必要がある．このため，更新を理解する registry code などでデフォルトを設定する必要があり，新しい値が明示され，古い値と異なる正当なエラーは検出して報告しなければならない．"
+    },
+    {
+      "task_id": "block_0235_s2",
+      "source_span": "1129-1134",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The resourceVersion is currently backed by etcd's mod_revision. However, it's important to note that the application should *not* rely on the implementation details of the versioning system maintained by Kubernetes. We may change the implementation of resourceVersion in the future, such as to change it to a timestamp or per-object counter.",
+      "constraint": "Applications should not rely on the implementation details of the Kubernetes resourceVersion versioning system, even though resourceVersion is currently backed by etcd's mod_revision, because the implementation may change in the future to a timestamp, per-object counter, or another mechanism.",
+      "interpretation": "resourceVersion は現在 etcd の mod_revision に基づくが，アプリケーションは Kubernetes が管理する versioning system の実装詳細に依存すべきではない．将来，timestamp，object ごとの counter，または別の仕組みに変わる可能性があるためである．"
+    },
+    {
+      "task_id": "block_0236_s2",
+      "source_span": "1136-1145",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The only way for a client to know the expected value of resourceVersion is to have received it from the server in response to a prior operation, typically a GET. This value MUST be treated as opaque by clients and passed unmodified back to the server.",
+      "constraint": "Clients must treat resourceVersion values received from the server in response to a prior operation, typically a GET, as opaque and pass them unmodified back to the server.",
+      "interpretation": "クライアントは，通常 GET などの以前の操作へのサーバー応答で受け取った resourceVersion を不透明な値として扱い，変更せずにサーバーへ渡し返さなければならない．"
+    },
+    {
+      "task_id": "block_0236_s3",
+      "source_span": "1136-1145",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "The only way for a client to know the expected value of resourceVersion is to have received it from the server in response to a prior operation, typically a GET. This value MUST be treated as opaque by clients and passed unmodified back to the server. Clients should not assume that the resource version has meaning across namespaces, different kinds of resources, or different servers. However, we expect the implementation of resourceVersion to change in the future, such as in the case we shard the state by kind and/or namespace, or port to another storage system.",
+      "constraint": "Clients should not assume that resourceVersion has meaning across namespaces, different kinds of resources, or different servers.",
+      "interpretation": "クライアントは，resourceVersion が namespace 間，異なる resource kind 間，または異なる server 間で意味を持つと仮定すべきではない．"
+    },
+    {
+      "task_id": "block_0242_s1",
+      "source_span": "1178-1180",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "APIs may return alternative representations of any resource in response to an Accept header or under alternative endpoints, but the default serialization for input and output of API responses MUST be JSON.",
+      "constraint": "APIs may return alternative representations of any resource in response to an Accept header or under alternative endpoints, but the default serialization for input and output of API responses must be JSON.",
+      "interpretation": "API は Accept header や代替 endpoint に応じて任意の resource の別表現を返してよいが，API 応答の入力および出力におけるデフォルトの serialization は JSON でなければならない．"
+    },
+    {
+      "task_id": "block_0244_s1",
+      "source_span": "1186-1186",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All dates should be serialized as RFC3339 strings.",
+      "constraint": "All dates should be serialized as RFC3339 strings.",
+      "interpretation": "すべての日付は RFC3339 文字列として serialize されるべきである．"
+    },
+    {
+      "task_id": "block_0245_s1",
+      "source_span": "1190-1193",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Units must either be explicit in the field name (e.g., `timeoutSeconds`), or must be specified as part of the value (e.g., `resource.Quantity`).",
+      "constraint": "Units must either be explicit in the field name, such as `timeoutSeconds`, or specified as part of the value, such as `resource.Quantity`.",
+      "interpretation": "単位は，`timeoutSeconds` のようにフィールド名で明示するか，`resource.Quantity` のように値の一部として指定しなければならない．"
+    },
+    {
+      "task_id": "block_0245_s2",
+      "source_span": "1190-1193",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Which approach is preferred is TBD, though currently we use the `fooSeconds` convention for durations.",
+      "constraint": "Until a preferred approach is determined, durations should use the `fooSeconds` field-name convention.",
+      "interpretation": "望ましい方式が決まるまでは，duration には現在使われている `fooSeconds` 形式のフィールド名規約を使うべきである．"
+    },
+    {
+      "task_id": "block_0246_s1",
+      "source_span": "1195-1197",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Duration fields must be represented as integer fields with units being part of the field name (e.g. `leaseDurationSeconds`). We don't use Duration in the API since that would require clients to implement go-compatible parsing.",
+      "constraint": "Duration fields must be represented as integer fields with units included in the field name, such as `leaseDurationSeconds`, because the API does not use Duration values that would require clients to implement Go-compatible parsing.",
+      "interpretation": "duration フィールドは，`leaseDurationSeconds` のように単位をフィールド名に含めた整数フィールドとして表現しなければならない．API では，クライアントに Go 互換の parsing を要求する Duration 値を使わないためである．"
+    },
+    {
+      "task_id": "block_0250_s1",
+      "source_span": "1214-1216",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Object references on a namespaced type should usually refer only to objects in the same namespace. Because namespaces are a security boundary, cross namespace references can have unexpected impacts, including:",
+      "constraint": "Object references on a namespaced type should usually refer only to objects in the same namespace because namespaces are a security boundary and cross-namespace references can have unexpected impacts.",
+      "interpretation": "namespaced type 上の object reference は，通常，同じ namespace 内の object だけを参照すべきである．namespace はセキュリティ境界であり，cross-namespace reference は予期しない影響を持ち得るためである．"
+    },
+    {
+      "task_id": "block_0254_s2",
+      "source_span": "1224-1225",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "unclear semantics on deletion. If a namespaced resource is referenced by other namespaces, should a delete of the referenced resource result in removal or should the referenced resource be force to remain.",
+      "constraint": "Cross-namespace references should clearly define deletion semantics, including whether deletion of a referenced namespaced resource results in removal or forces the referenced resource to remain.",
+      "interpretation": "cross-namespace reference を使う場合，参照される namespaced resource の削除によって removal するのか，参照先 resource を残すことを強制するのかなど，削除時の意味を明確に定義すべきである．"
+    },
+    {
+      "task_id": "block_0256_s2",
+      "source_span": "1229-1233",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Built-in types and ownerReferences do not support cross namespaces references. If a non-built-in types chooses to have cross-namespace references the semantics of the edge cases above should be clearly described and the permissions issues should be resolved. This could be done with a double opt-in (an opt-in from both the referrer and the refer-ee) or with secondary permissions checks performed in admission.",
+      "constraint": "Built-in types and ownerReferences do not support cross-namespace references; if a non-built-in type chooses to have cross-namespace references, the edge-case semantics should be clearly described and the permissions issues should be resolved, such as with double opt-in from both the referrer and the refer-ee or with secondary permissions checks performed in admission.",
+      "interpretation": "built-in type と ownerReferences は cross-namespace reference をサポートしない．non-built-in type が cross-namespace reference を選ぶ場合，上記の edge case の意味を明確に記述し，referrer と refer-ee の両方による double opt-in や admission での二次的な権限チェックなどにより，権限上の問題を解決すべきである．"
+    },
+    {
+      "task_id": "block_0257_s1",
+      "source_span": "1237-1237",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The name of the reference field should be of the format \"{field}Ref\", with \"Ref\" always included in the suffix.",
+      "constraint": "The name of a reference field should use the format `{field}Ref`, with `Ref` always included as the suffix.",
+      "interpretation": "reference フィールド名は `{field}Ref` 形式にすべきであり，suffix として常に `Ref` を含めるべきである．"
+    },
+    {
+      "task_id": "block_0258_s1",
+      "source_span": "1239-1240",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The \"{field}\" component should be named to indicate the purpose of the reference. For example, \"targetRef\" in an endpoint indicates that the object reference specifies the target.",
+      "constraint": "The `{field}` component of a reference field name should indicate the purpose of the reference, such as `targetRef` in an endpoint indicating that the object reference specifies the target.",
+      "interpretation": "reference フィールド名の `{field}` 部分は，参照の目的を示す名前にすべきである．たとえば endpoint の `targetRef` は，object reference が target を指定することを示す．"
+    },
+    {
+      "task_id": "block_0260_s1",
+      "source_span": "1246-1247",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "In the case of a list of object references, the field should be of the format \"{field}Refs\", with the same guidance as the singular case above.",
+      "constraint": "A field containing a list of object references should use the format `{field}Refs`, with the same naming guidance as the singular reference-field case.",
+      "interpretation": "object reference のリストを保持するフィールドは `{field}Refs` 形式にすべきであり，単数の reference フィールドと同じ命名指針に従うべきである．"
+    },
+    {
+      "task_id": "block_0262_s1",
+      "source_span": "1254-1254",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Controllers should assume that a version of a resource may change, and include appropriate error handling.",
+      "constraint": "Controllers should assume that a version of a resource may change and include appropriate error handling.",
+      "interpretation": "コントローラーは，resource の version が変わる可能性を前提にし，適切なエラーハンドリングを含めるべきである．"
+    },
+    {
+      "task_id": "block_0267_s1",
+      "source_span": "1264-1265",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Controllers should be authored with the assumption that the referenced resource may not exist, and include error handling to make the issue clear to the user.",
+      "constraint": "Controllers should be authored with the assumption that a referenced resource may not exist and include error handling that makes the issue clear to the user.",
+      "interpretation": "コントローラーは，参照先 resource が存在しない可能性を前提に作成されるべきであり，その問題がユーザーに明確に伝わるエラーハンドリングを含めるべきである．"
+    },
+    {
+      "task_id": "block_0271_s1",
+      "source_span": "1281-1283",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "To minimize potential privilege escalation vectors, do not modify the object that is being referred to, or limit modification to objects in the same namespace and constrain the type of modification allowed (for example, the HorizontalPodAutoscaler controller only writes to the `/scale` subresource).",
+      "constraint": "To minimize potential privilege-escalation vectors, controllers must not modify the object being referred to, or must limit modification to objects in the same namespace and constrain the type of modification allowed.",
+      "interpretation": "権限昇格の可能性を最小化するため，コントローラーは参照されている object を変更してはならない．変更する場合でも，同じ namespace 内の object に限定し，許可される変更の種類を制約しなければならない．"
+    },
+    {
+      "task_id": "block_0274_s1",
+      "source_span": "1295-1295",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "In general, do not write or print information retrieved from the referred object to the spec, other objects, or logs.",
+      "constraint": "Information retrieved from the referred object must not be written or printed to the spec, other objects, or logs.",
+      "interpretation": "参照先オブジェクトから取得した情報は，原則として spec，他のオブジェクト，またはログへ書き込んだり出力したりしてはならない．"
+    },
+    {
+      "task_id": "block_0275_s1",
+      "source_span": "1297-1299",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "When it is necessary, consider whether these values would be ones that the author of the referrer object would have access to via other means (e.g. already required to correctly populate the object reference).",
+      "constraint": "When writing or printing values retrieved from the referred object is necessary, the implementation must consider whether the referrer object author would have access to those values through other means, such as values already required to correctly populate the object reference.",
+      "interpretation": "参照先オブジェクトから取得した値を書き込む，または出力する必要がある場合，実装は，その値が参照元オブジェクトの作成者にとって他の手段でアクセス可能なものかを検討しなければならない．例として，オブジェクト参照を正しく埋めるために既に必要な値が該当する．"
+    },
+    {
+      "task_id": "block_0280_s1",
+      "source_span": "1325-1326",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "This schema should only be used when the intention is to always have the reference only be to a single resource. If extending to multiple resource types is possible, use the multiple resource reference.",
+      "constraint": "A single resource reference schema should be used only when the intended reference is always to a single resource; if extension to multiple resource types is possible, the multiple resource reference should be used.",
+      "interpretation": "単一リソース参照スキーマは，参照先が常に 1 種類のリソースだけである意図の場合にのみ使うべきである．将来，複数のリソース種別へ拡張する可能性があるなら，複数リソース参照を使うべきである．"
+    },
+    {
+      "task_id": "block_0285_s4",
+      "source_span": "1351-1356",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "A common point of confusion in object references is whether to construct references with a \"kind\" or \"resource\" field. Historically most object references in Kubernetes have used \"kind\". This is not as precise as \"resource\". Although each combination of \"group\" and \"resource\" must be unique within Kubernetes, the same is not always true for \"group\" and \"kind\". It is possible for multiple resources to make use of the same \"kind\".",
+      "constraint": "Object references must account for the fact that `kind` is less precise than `resource`, because each `group` and `resource` combination must be unique within Kubernetes, while multiple resources can use the same `kind` within a `group`.",
+      "interpretation": "オブジェクト参照では，`kind` が `resource` より精密でないことを考慮しなければならない．Kubernetes では `group` と `resource` の組み合わせは一意である必要がある一方，同じ `group` 内で複数のリソースが同じ `kind` を使う可能性があるためである．"
+    },
+    {
+      "task_id": "block_0288_s1",
+      "source_span": "1375-1377",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "If an object reference may be used to reference resources of arbitrary types and the mapping between kind and resource could be ambiguous, \"resource\" should be used in the object reference.",
+      "constraint": "If an object reference may reference resources of arbitrary types and the mapping between `kind` and `resource` could be ambiguous, the object reference should use `resource`.",
+      "interpretation": "任意の型のリソースを参照し得るオブジェクト参照で，`kind` と `resource` の対応が曖昧になり得る場合，その参照では `resource` を使うべきである．"
+    },
+    {
+      "task_id": "block_0292_s2",
+      "source_span": "1402-1403",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "It is also possible to have the controller choose a version that it finds via the discovery client. However, as schemas can vary across different versions of a resource, the controller must also handle these differences.",
+      "constraint": "If a controller chooses a resource version found through the discovery client, the controller must handle schema differences across different versions of the resource.",
+      "interpretation": "コントローラーが discovery client で見つけたリソースバージョンを選ぶ場合，リソースのバージョン間でスキーマが異なり得るため，その差異を扱わなければならない．"
+    },
+    {
+      "task_id": "block_0295_s2",
+      "source_span": "1422-1422",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The operator would be expected to find the resource via the discovery client (as the version is not supplied). As any retrievable field would be common to all objects, any version of the resource should do.",
+      "constraint": "When the version is not supplied, the operator should find the resource through the discovery client, and any version of the resource should be acceptable because any retrievable field would be common to all objects.",
+      "interpretation": "バージョンが指定されない場合，オペレーターは discovery client でリソースを見つけるべきである．取得可能なフィールドはすべてのオブジェクトに共通であるため，そのリソースの任意のバージョンでよいとされる．"
+    },
+    {
+      "task_id": "block_0297_s2",
+      "source_span": "1428-1428",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Field references differ from other reference types, as the operator has no knowledge of the object prior to the reference. Since the schema of an object can differ for different versions of a resource, this means that a “version” is required for this type of reference.",
+      "constraint": "Field references must include a `version` because the operator has no knowledge of the object before the reference and the object schema can differ across different versions of a resource.",
+      "interpretation": "フィールド参照では，参照前にオペレーターが対象オブジェクトを知らず，リソースのバージョンによってオブジェクトスキーマが異なり得るため，`version` を含めなければならない．"
+    },
+    {
+      "task_id": "block_0298_s1",
+      "source_span": "1438-1438",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The fieldPath should point to a single value, and use the recommended field selector notation to denote the field path.",
+      "constraint": "The `fieldPath` should point to a single value and use the recommended field selector notation to denote the field path.",
+      "interpretation": "`fieldPath` は単一の値を指すべきであり，フィールドパスの表記には推奨される field selector 記法を使うべきである．"
+    },
+    {
+      "task_id": "block_0299_s1",
+      "source_span": "1442-1443",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "In this scenario, the user will supply all of the required path elements: group, version, resource, name, and possibly namespace. As such, the controller can construct the API prefix and query it without the use of the discovery client:",
+      "constraint": "When the user supplies all required path elements, including `group`, `version`, `resource`, `name`, and possibly `namespace`, the controller can construct the API prefix and query it without using the discovery client.",
+      "interpretation": "ユーザーが `group`，`version`，`resource`，`name`，および必要に応じて `namespace` を含む必須のパス要素をすべて提供する場合，コントローラーは discovery client を使わずに API プレフィックスを構築してクエリできる．"
+    },
+    {
+      "task_id": "block_0365_s2",
+      "source_span": "1577-1578",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Kubernetes will always return the `Status` kind from any API endpoint when an error occurs. Clients SHOULD handle these types of objects when appropriate.",
+      "constraint": "Clients should handle `Status` kind objects when appropriate because Kubernetes always returns the `Status` kind from any API endpoint when an error occurs.",
+      "interpretation": "Kubernetes はエラー発生時，どの API エンドポイントからも常に `Status` kind を返すため，クライアントは適切な場合にそのオブジェクトを扱うべきである．"
+    },
+    {
+      "task_id": "block_0369_s4",
+      "source_span": "1585-1591",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The information in the status object supplements, but does not override, the HTTP status code's meaning. When fields in the status object have the same meaning as generally defined HTTP headers and that header is returned with the response, the header should be considered as having higher priority.",
+      "constraint": "The status object should supplement but not override the HTTP status code meaning, and when status object fields have the same meaning as generally defined HTTP headers returned with the response, the HTTP header should have higher priority.",
+      "interpretation": "status オブジェクトの情報は HTTP ステータスコードの意味を補足するものであり，それを上書きすべきではない．status オブジェクト内のフィールドが一般的な HTTP ヘッダーと同じ意味を持ち，そのヘッダーもレスポンスで返されている場合，HTTP ヘッダーをより優先すべきである．"
+    },
+    {
+      "task_id": "block_0400_s1",
+      "source_span": "1678-1679",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "`NotFound` Indicates that one or more resources required for this operation could not be found.",
+      "constraint": "`NotFound` must indicate that one or more resources required for the operation could not be found.",
+      "interpretation": "`NotFound` は，その操作に必要な 1 つ以上のリソースが見つからなかったことを示さなければならない．"
+    },
+    {
+      "task_id": "block_0431_s1",
+      "source_span": "1726-1728",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "`Timeout` The server should set the `Retry-After` HTTP header and return `retryAfterSeconds` in the details field of the object. A value of `0` is the default.",
+      "constraint": "For `Timeout`, the server should set the `Retry-After` HTTP header and return `retryAfterSeconds` in the object `details` field, with `0` as the default value.",
+      "interpretation": "`Timeout` の場合，サーバーは `Retry-After` HTTP ヘッダーを設定し，オブジェクトの `details` フィールドに `retryAfterSeconds` を返すべきである．既定値は `0` である．"
+    },
+    {
+      "task_id": "block_0439_s1",
+      "source_span": "1740-1742",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "`ServerTimeout` The server should set the `Retry-After` HTTP header and return `retryAfterSeconds` in the details field of the object.",
+      "constraint": "For `ServerTimeout`, the server should set the `Retry-After` HTTP header and return `retryAfterSeconds` in the object `details` field.",
+      "interpretation": "`ServerTimeout` の場合，サーバーは `Retry-After` HTTP ヘッダーを設定し，オブジェクトの `details` フィールドに `retryAfterSeconds` を返すべきである．"
+    },
+    {
+      "task_id": "block_0452_s2",
+      "source_span": "1765-1768",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Events are complementary to status information, since they can provide some historical information about status and occurrences in addition to current or previous status. Generate events for situations users or administrators should be alerted about.",
+      "constraint": "Events should be generated for situations that users or administrators should be alerted about.",
+      "interpretation": "ユーザーまたは管理者に通知すべき状況では，イベントを生成するべきである．イベントは status 情報を補完し，現在または過去の status に加えて履歴的な情報を提供できるためである．"
+    },
+    {
+      "task_id": "block_0456_s1",
+      "source_span": "1784-1786",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Go field names must be PascalCase.",
+      "constraint": "Go field names must be PascalCase.",
+      "interpretation": "Go のフィールド名は PascalCase でなければならない．"
+    },
+    {
+      "task_id": "block_0456_s2",
+      "source_span": "1784-1786",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "JSON field names must be camelCase.",
+      "constraint": "JSON field names must be camelCase.",
+      "interpretation": "JSON のフィールド名は camelCase でなければならない．"
+    },
+    {
+      "task_id": "block_0456_s3",
+      "source_span": "1784-1786",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Go field names must be PascalCase. JSON field names must be camelCase. Other than capitalization of the initial letter, the two should almost always match.",
+      "constraint": "Go field names and JSON field names should almost always match except for capitalization of the initial letter.",
+      "interpretation": "Go のフィールド名と JSON のフィールド名は，先頭文字の大文字小文字を除いて，ほとんど常に一致しているべきである．"
+    },
+    {
+      "task_id": "block_0457_s1",
+      "source_span": "1787-1788",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Field and resource names should be declarative, not imperative (SomethingDoer, DoneBy, DoneAt).",
+      "constraint": "Field and resource names should be declarative rather than imperative.",
+      "interpretation": "フィールド名とリソース名は，命令的な名前ではなく宣言的な名前にするべきである．"
+    },
+    {
+      "task_id": "block_0459_s1",
+      "source_span": "1793-1794",
+      "source_strength": [
+        "deprecation"
+      ],
+      "original": "`FooController` is a deprecated kind naming convention.",
+      "constraint": "`FooController` must not be used as a kind naming convention because it is deprecated.",
+      "interpretation": "`FooController` は非推奨の kind 命名規則であるため，kind 名の慣習として使ってはならない．"
+    },
+    {
+      "task_id": "block_0460_s1",
+      "source_span": "1795-1796",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The name of a field that specifies the time at which `something` occurs should be called `somethingTime`.",
+      "constraint": "A field that specifies the time at which `something` occurs should be named `somethingTime`.",
+      "interpretation": "`something` が発生する時刻を表すフィールドは，`somethingTime` という名前にするべきである．"
+    },
+    {
+      "task_id": "block_0460_s2",
+      "source_span": "1795-1796",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Do not use `stamp` (e.g., `creationTimestamp`).",
+      "constraint": "Field names must not use `stamp`, such as `creationTimestamp`.",
+      "interpretation": "フィールド名では，`creationTimestamp` のような `stamp` を使ってはならない．"
+    },
+    {
+      "task_id": "block_0462_s1",
+      "source_span": "1799-1800",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "We use the `fooSeconds` convention for durations, as discussed in the [units `fooPeriodSeconds` is preferred for periodic intervals and other waiting periods (e.g., over `fooIntervalSeconds`).",
+      "constraint": "Duration fields should use the `fooSeconds` convention, and periodic intervals and other waiting periods should prefer `fooPeriodSeconds` over names such as `fooIntervalSeconds`.",
+      "interpretation": "期間を表すフィールドは `fooSeconds` という慣習を使うべきであり，周期的な間隔やその他の待機期間には，`fooIntervalSeconds` などよりも `fooPeriodSeconds` を優先するべきである．"
+    },
+    {
+      "task_id": "block_0463_s1",
+      "source_span": "1801-1801",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "We use the `fooSeconds` convention for durations, as discussed in the [units `fooTimeoutSeconds` is preferred for inactivity/unresponsiveness deadlines.",
+      "constraint": "Duration fields should use the `fooSeconds` convention, and inactivity or unresponsiveness deadlines should prefer `fooTimeoutSeconds`.",
+      "interpretation": "期間を表すフィールドは `fooSeconds` という慣習を使うべきであり，非活動または無応答の期限には `fooTimeoutSeconds` を優先するべきである．"
+    },
+    {
+      "task_id": "block_0464_s1",
+      "source_span": "1802-1802",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "We use the `fooSeconds` convention for durations, as discussed in the [units `fooDeadlineSeconds` is preferred for activity completion deadlines.",
+      "constraint": "API duration fields should use the `fooSeconds` naming convention, and activity completion deadline fields should use names such as `fooDeadlineSeconds`.",
+      "interpretation": "API の期間を表すフィールド名には `fooSeconds` 形式を使うべきであり，活動完了の期限を表すフィールドには `fooDeadlineSeconds` のような名前を使うことが望ましい．"
+    },
+    {
+      "task_id": "block_0465_s1",
+      "source_span": "1803-1804",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Do not use abbreviations in the API, except where they are extremely commonly used, such as \"id\", \"args\", or \"stdin\".",
+      "constraint": "APIs must not use abbreviations except for extremely commonly used abbreviations such as `id`, `args`, or `stdin`.",
+      "interpretation": "API では略語を使ってはならないが，`id`，`args`，`stdin` のように極めて一般的に使われる略語は例外として許される．"
+    },
+    {
+      "task_id": "block_0466_s1",
+      "source_span": "1805-1809",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Acronyms should similarly only be used when extremely commonly known.",
+      "constraint": "APIs should use acronyms only when the acronyms are extremely commonly known.",
+      "interpretation": "API で頭字語を使う場合は，その頭字語が極めて広く知られている場合に限るべきである．"
+    },
+    {
+      "task_id": "block_0466_s2",
+      "source_span": "1805-1809",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All letters in the acronym should have the same case, using the appropriate case for the situation.",
+      "constraint": "All letters in an acronym should use the same case, with the case chosen appropriately for the situation.",
+      "interpretation": "頭字語内のすべての文字は，同じ大文字小文字の形式でそろえ，状況に応じた適切な形式を選ぶべきである．"
+    },
+    {
+      "task_id": "block_0466_s3",
+      "source_span": "1805-1809",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All letters in the acronym should have the same case, using the appropriate case for the situation. For example, at the beginning of a field name, the acronym should be all lowercase, such as \"httpGet\".",
+      "constraint": "All letters in an acronym should use the same case appropriate to the situation, and an acronym at the beginning of a field name should be all lowercase, such as `httpGet`.",
+      "interpretation": "頭字語は状況に応じた同一ケースでそろえるべきであり，フィールド名の先頭に置く場合は `httpGet` のようにすべて小文字にするべきである．"
+    },
+    {
+      "task_id": "block_0466_s4",
+      "source_span": "1805-1809",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "For example, at the beginning of a field name, the acronym should be all lowercase, such as \"httpGet\". Where used as a constant, all letters should be uppercase, such as \"TCP\" or \"UDP\".",
+      "constraint": "An acronym at the beginning of a field name should be all lowercase, such as `httpGet`, and an acronym used as a constant should be all uppercase, such as `TCP` or `UDP`.",
+      "interpretation": "フィールド名の先頭にある頭字語は `httpGet` のようにすべて小文字にし，定数として使う頭字語は `TCP` や `UDP` のようにすべて大文字にするべきである．"
+    },
+    {
+      "task_id": "block_0467_s1",
+      "source_span": "1810-1812",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The name of a field referring to another resource of kind `Foo` by name should be called `fooName`.",
+      "constraint": "A field that refers to another resource of kind `Foo` by name should be named `fooName`.",
+      "interpretation": "種類 `Foo` の別リソースを名前で参照するフィールドは，`fooName` という名前にするべきである．"
+    },
+    {
+      "task_id": "block_0467_s2",
+      "source_span": "1810-1812",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The name of a field referring to another resource of kind `Foo` by ObjectReference (or subset thereof) should be called `fooRef`.",
+      "constraint": "A field that refers to another resource of kind `Foo` by `ObjectReference` or a subset of `ObjectReference` should be named `fooRef`.",
+      "interpretation": "種類 `Foo` の別リソースを `ObjectReference` またはその一部で参照するフィールドは，`fooRef` という名前にするべきである．"
+    },
+    {
+      "task_id": "block_0469_s1",
+      "source_span": "1815-1816",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "The name of a field expressing a boolean property called 'fooable' should be called `Fooable`, not `IsFooable`.",
+      "constraint": "A field expressing a boolean property called `fooable` should be named `Fooable`, not `IsFooable`.",
+      "interpretation": "`fooable` というブール属性を表すフィールドは，`IsFooable` ではなく `Fooable` という名前にするべきである．"
+    },
+    {
+      "task_id": "block_0470_s1",
+      "source_span": "1819-1820",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "The name of a namespace must be a DNS_LABEL.",
+      "constraint": "A namespace name must be a `DNS_LABEL`.",
+      "interpretation": "namespace の名前は `DNS_LABEL` でなければならない．"
+    },
+    {
+      "task_id": "block_0473_s5",
+      "source_span": "1828-1836",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Labels are the domain of users. They are intended to facilitate organization and management of API resources using attributes that are meaningful to users, as opposed to meaningful to the system. Users will use labels to select resources to operate on, display label values in CLI/UI columns, etc. Users should always retain full power and flexibility over the label schemas they apply to labels in their namespaces.",
+      "constraint": "Users should always retain full power and flexibility over the label schemas they apply to labels in their namespaces.",
+      "interpretation": "ユーザーは，自分の namespace 内の label に適用する label schema について，常に完全な権限と柔軟性を保持するべきである．"
+    },
+    {
+      "task_id": "block_0474_s1",
+      "source_span": "1838-1844",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "However, we should support conveniences for common cases by default. For example, what we now do in ReplicationController is automatically set the RC's selector and labels to the labels in the pod template by default, if they are not already set. That ensures that the selector will match the template, and that the RC can be managed using the same labels as the pods it creates.",
+      "constraint": "APIs should support conveniences for common cases by default, such as automatically setting a `ReplicationController` selector and labels to the labels in the pod template by default when the selector and labels are not already set.",
+      "interpretation": "API は一般的な用途に対する利便性をデフォルトで提供するべきであり，例として `ReplicationController` の selector と labels が未設定なら pod template の labels から自動設定してよい．"
+    },
+    {
+      "task_id": "block_0476_s3",
+      "source_span": "1852-1859",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "For disciplined users managing resources within their own namespaces, it's not that hard to consistently apply schemas that ensure uniqueness. One just needs to ensure that at least one value of some label key in common differs compared to all other comparable resources. We could/should provide a verification tool to check that.",
+      "constraint": "A verification tool should be provided to check that at least one value of some common label key differs compared to all other comparable resources.",
+      "interpretation": "共通する label key の少なくとも 1 つの値が，他の比較可能なリソースすべてと異なることを確認するための検証ツールを提供するべきである．"
+    },
+    {
+      "task_id": "block_0478_s6",
+      "source_span": "1868-1881",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Problems with uids and hashes, however, include that they have no semantic meaning to the user, are not memorable nor readily recognizable, and are not predictable. Lack of predictability obstructs use cases such as creation of a replication controller from a pod, such as people want to do when exploring the system, bootstrapping a self-hosted cluster, or deletion and re-creation of a new RC that adopts the pods of the previous one, such as to rename it. Users should always be able to turn off auto-generation, in order to permit some of the scenarios described above.",
+      "constraint": "Users should always be able to turn off auto-generation of UIDs or hashes in order to permit scenarios that require predictable labels, such as creating a replication controller from a pod or deleting and re-creating a new replication controller that adopts pods from the previous replication controller.",
+      "interpretation": "予測可能な label が必要な場面を許すため，ユーザーは UID や hash の自動生成を常に無効化できるべきである．例として，pod から replication controller を作る場合や，既存の pods を引き継ぐ新しい replication controller を削除後に再作成する場合が挙げられる．"
+    },
+    {
+      "task_id": "block_0479_s3",
+      "source_span": "1883-1887",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Inclusion of a system prefix in a label key is fairly hostile to UX. A prefix is only necessary in the case that the user cannot choose the label key, in order to avoid collisions with user-defined labels. However, I firmly believe that the user should always be allowed to select the label keys to use on their resources, so it should always be possible to override default label keys.",
+      "constraint": "Users should always be allowed to select the label keys to use on their resources, so default label keys should always be overrideable.",
+      "interpretation": "ユーザーは自分のリソースで使う label key を常に選べるべきであり，そのためデフォルトの label key は常に上書き可能であるべきである．"
+    },
+    {
+      "task_id": "block_0480_s1",
+      "source_span": "1889-1893",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Therefore, resources supporting auto-generation of unique labels should have a `uniqueLabelKey` field, so that the user could specify the key if they wanted to, but if unspecified, it could be set by default, such as to the resource type, like job, deployment, or replicationController. The value would need to be at least spatially unique, and perhaps temporally unique in the case of job.",
+      "constraint": "Resources supporting auto-generation of unique labels should have a `uniqueLabelKey` field that lets the user specify the key, uses a default such as the resource type when unspecified, and has a value that is at least spatially unique and perhaps temporally unique for jobs.",
+      "interpretation": "一意な label の自動生成を支援するリソースには `uniqueLabelKey` フィールドを持たせるべきである．ユーザーが key を指定でき，未指定時は job，deployment，replicationController のようなリソース種別をデフォルトにでき，値は少なくとも空間的に一意で，job では時間的にも一意である必要があり得る．"
+    },
+    {
+      "task_id": "block_0481_s7",
+      "source_span": "1895-1905",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Like labels, annotation keys can be prefixed with a governing domain (e.g. `example.com/key-name`). Unprefixed keys (e.g. `key-name`) are reserved for end-users. Third-party components must use prefixed keys.",
+      "constraint": "Third-party components must use prefixed annotation keys because unprefixed annotation keys are reserved for end-users.",
+      "interpretation": "prefix なしの annotation key はエンドユーザー用に予約されているため，サードパーティ component は prefix 付きの annotation key を使わなければならない．"
+    },
+    {
+      "task_id": "block_0481_s8",
+      "source_span": "1895-1905",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "Like labels, annotation keys can be prefixed with a governing domain (e.g. `example.com/key-name`). Key prefixes under the \"kubernetes.io\" and \"k8s.io\" domains are reserved for use by the kubernetes project and must not be used by third-parties.",
+      "constraint": "Third parties must not use annotation key prefixes under the `kubernetes.io` and `k8s.io` domains because those prefixes are reserved for use by the Kubernetes project.",
+      "interpretation": "`kubernetes.io` と `k8s.io` ドメイン配下の annotation key prefix は Kubernetes project 用に予約されているため，サードパーティはそれらを使ってはならない．"
+    },
+    {
+      "task_id": "block_0482_s2",
+      "source_span": "1907-1911",
+      "source_strength": [
+        "deprecation"
+      ],
+      "original": "In early versions of Kubernetes, some in-development features represented new API fields as annotations, generally with the form `something.alpha.kubernetes.io/name` or `something.beta.kubernetes.io/name` (depending on our confidence in it). This pattern is deprecated.",
+      "constraint": "The pattern of representing new in-development API fields as annotations with forms such as `something.alpha.kubernetes.io/name` or `something.beta.kubernetes.io/name` is deprecated.",
+      "interpretation": "開発中の新しい API field を `something.alpha.kubernetes.io/name` や `something.beta.kubernetes.io/name` のような annotation として表す方式は非推奨である．"
+    },
+    {
+      "task_id": "block_0484_s1",
+      "source_span": "1915-1915",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Key names should be all lowercase, with words separated by dashes instead of camelCase",
+      "constraint": "Key names should be all lowercase, with words separated by dashes instead of camelCase.",
+      "interpretation": "key 名はすべて小文字にし，camelCase ではなく dash で単語を区切るべきである．"
+    },
+    {
+      "task_id": "block_0486_s2",
+      "source_span": "1918-1918",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Unprefixed keys are reserved for end-users. All other labels and annotations must be prefixed.",
+      "constraint": "All labels and annotations other than unprefixed keys reserved for end-users must be prefixed.",
+      "interpretation": "エンドユーザー用に予約された prefix なし key を除き，すべての labels と annotations は prefix 付きでなければならない．"
+    },
+    {
+      "task_id": "block_0489_s1",
+      "source_span": "1923-1924",
+      "source_strength": [
+        "recommendation",
+        "prohibition"
+      ],
+      "original": "Key prefixes under \"kubernetes.io\" and \"k8s.io\" are reserved for the Kubernetes \"kubernetes.io\" is the preferred form for labels and annotations, \"k8s.io\" should not be used for new map keys.",
+      "constraint": "Key prefixes under `kubernetes.io` and `k8s.io` are reserved for Kubernetes, `kubernetes.io` is the preferred form for labels and annotations, and `k8s.io` should not be used for new map keys.",
+      "interpretation": "`kubernetes.io` と `k8s.io` 配下の key prefix は Kubernetes 用に予約されている．labels と annotations では `kubernetes.io` が推奨形式であり，新しい map key には `k8s.io` を使うべきではない．"
+    },
+    {
+      "task_id": "block_0490_s1",
+      "source_span": "1925-1926",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Key names, including prefixes, should be precise enough that a user could plausibly understand where it came from and what it is for.",
+      "constraint": "Key names, including prefixes, should be precise enough that a user could plausibly understand where the key came from and what the key is for.",
+      "interpretation": "prefix を含む key 名は，ユーザーがその由来と用途をもっともらしく理解できる程度に具体的であるべきである．"
+    },
+    {
+      "task_id": "block_0491_s1",
+      "source_span": "1927-1927",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Key prefixes should carry as much context as possible.",
+      "constraint": "Key prefixes should carry as much context as possible.",
+      "interpretation": "key prefix には，可能な限り多くの文脈情報を持たせるべきである．"
+    },
+    {
+      "task_id": "block_0500_s1",
+      "source_span": "1971-1974",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Clients should use the SPDY protocols if their clients have native support, or WebSockets as a fallback.",
+      "constraint": "Clients should use SPDY protocols when the clients have native support, or WebSockets as a fallback.",
+      "interpretation": "client が SPDY protocol をネイティブにサポートしている場合はそれを使うべきであり，そうでない場合は fallback として WebSockets を使うべきである．"
+    },
+    {
+      "task_id": "block_0500_s2",
+      "source_span": "1971-1974",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Clients should use the SPDY protocols if their clients have native support, or WebSockets as a fallback. Note that WebSockets is susceptible to Head-of-Line blocking and so clients must read and process each message sequentially.",
+      "constraint": "Clients should use SPDY protocols when the clients have native SPDY support, or use WebSockets as a fallback, and clients using WebSockets must read and process each message sequentially because WebSockets is susceptible to Head-of-Line blocking.",
+      "interpretation": "クライアントにSPDYのネイティブサポートがある場合はSPDYプロトコルを使うべきであり，そうでない場合はフォールバックとしてWebSocketsを使う．WebSocketsを使うクライアントは，Head-of-Line blockingの影響を受けるため，各メッセージを順番に読み取り処理しなければならない．"
+    },
+    {
+      "task_id": "block_0501_s3",
+      "source_span": "1979-1986",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "API objects are validated upon receipt by the apiserver. Validation can be implemented in two ways: declaratively, using tags on the Go type definitions, or manually, by writing validation functions. For all new APIs, declarative validation is the preferred approach for the validation rules it supports.",
+      "constraint": "For all new APIs, declarative validation using tags on Go type definitions is the preferred approach for the validation rules that declarative validation supports.",
+      "interpretation": "新しいAPIでは，宣言的バリデーションが対応している検証規則について，Go型定義上のタグを使う宣言的バリデーションを優先すべきである．"
+    },
+    {
+      "task_id": "block_0502_s1",
+      "source_span": "1990-1991",
+      "source_strength": [
+        "obligation",
+        "recommendation"
+      ],
+      "original": "All fields should be declared optional or required, and validation should check the requiredness.",
+      "constraint": "All fields should be declared optional or required, and validation should check whether required fields are present.",
+      "interpretation": "すべてのフィールドはoptionalまたはrequiredとして宣言されるべきであり，バリデーションはrequiredなフィールドが存在するかを確認すべきである．"
+    },
+    {
+      "task_id": "block_0503_s1",
+      "source_span": "1997-1999",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Almost all string fields should be checked for format.",
+      "constraint": "Almost all string fields should be checked for format.",
+      "interpretation": "ほぼすべての文字列フィールドは，期待される形式に合っているか検査されるべきである．"
+    },
+    {
+      "task_id": "block_0503_s2",
+      "source_span": "1997-1999",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Some format checks include checking for length (e.g. \"short-name\", aka, \"DNS Label\" must be less than 64 bytes).",
+      "constraint": "Format checks must include applicable length checks, such as requiring a short-name, also known as a DNS Label, to be less than 64 bytes.",
+      "interpretation": "形式検査には，該当する場合は長さの検査を含めなければならない．たとえばshort-name，すなわちDNS Labelは64バイト未満でなければならない．"
+    },
+    {
+      "task_id": "block_0504_s1",
+      "source_span": "2001-2002",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All string fields should be checked for maximum length.",
+      "constraint": "All string fields should be checked for maximum length.",
+      "interpretation": "すべての文字列フィールドは，最大長を検査されるべきである．"
+    },
+    {
+      "task_id": "block_0504_s2",
+      "source_span": "2001-2002",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All string fields should be checked for maximum length. If the field has a minimum length, that should also be checked.",
+      "constraint": "All string fields should be checked for maximum length, and string fields with a minimum length should also be checked for minimum length.",
+      "interpretation": "すべての文字列フィールドは最大長を検査されるべきであり，最小長がある文字列フィールドは最小長も検査されるべきである．"
+    },
+    {
+      "task_id": "block_0505_s3",
+      "source_span": "2004-2007",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Never do case-insensitive comparisons in validation. This is a source of bugs and failed uniqueness assumptions. If validation treats \"abc\" and \"ABC\" as the same, then ALL consumers of that field must do the same, and it is very easy to miss a case.",
+      "constraint": "Validation must never perform case-insensitive comparisons, because if validation treats values such as \"abc\" and \"ABC\" as the same, all consumers of that field must do the same.",
+      "interpretation": "バリデーションでは，大文字小文字を区別しない比較を決して行ってはならない．たとえばバリデーションが\"abc\"と\"ABC\"を同じものとして扱うなら，そのフィールドのすべての利用者も同じ扱いをしなければならなくなるためである．"
+    },
+    {
+      "task_id": "block_0506_s1",
+      "source_span": "2011-2012",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All numeric fields should be bounds-checked, both for too-small values (including negative) and for too-large values.",
+      "constraint": "All numeric fields should be bounds-checked for values that are too small, including negative values, and for values that are too large.",
+      "interpretation": "すべての数値フィールドは，負の値を含む小さすぎる値と，大きすぎる値の両方について範囲検査されるべきである．"
+    },
+    {
+      "task_id": "block_0507_s1",
+      "source_span": "2016-2017",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All list fields should be checked for maximum size.",
+      "constraint": "All list fields should be checked for maximum size.",
+      "interpretation": "すべてのリストフィールドは，最大サイズを検査されるべきである．"
+    },
+    {
+      "task_id": "block_0507_s2",
+      "source_span": "2016-2017",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All list fields should be checked for maximum size. If the list has a minimum size, that should also be checked.",
+      "constraint": "All list fields should be checked for maximum size, and list fields with a minimum size should also be checked for minimum size.",
+      "interpretation": "すべてのリストフィールドは最大サイズを検査されるべきであり，最小サイズがあるリストフィールドは最小サイズも検査されるべきである．"
+    },
+    {
+      "task_id": "block_0508_s1",
+      "source_span": "2019-2021",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All list fields should have their \"listType\" tag(s) set.",
+      "constraint": "All list fields should have their \"listType\" tags set.",
+      "interpretation": "すべてのリストフィールドには，\"listType\"タグが設定されるべきである．"
+    },
+    {
+      "task_id": "block_0508_s2",
+      "source_span": "2019-2021",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All list fields should have their \"listType\" tag(s) set. Lists with set or map semantics should be checked for uniqueness (declarative validation will do this authomatically).",
+      "constraint": "All list fields should have their \"listType\" tags set, and lists with set or map semantics should be checked for uniqueness.",
+      "interpretation": "すべてのリストフィールドには\"listType\"タグが設定されるべきであり，setまたはmapの意味を持つリストは一意性を検査されるべきである．"
+    },
+    {
+      "task_id": "block_0509_s1",
+      "source_span": "2025-2026",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All map fields should be checked for maximum size.",
+      "constraint": "All map fields should be checked for maximum size.",
+      "interpretation": "すべてのmapフィールドは，最大サイズを検査されるべきである．"
+    },
+    {
+      "task_id": "block_0509_s2",
+      "source_span": "2025-2026",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "All map fields should be checked for maximum size. If the map has a minimum size, that should also be checked.",
+      "constraint": "All map fields should be checked for maximum size, and map fields with a minimum size should also be checked for minimum size.",
+      "interpretation": "すべてのmapフィールドは最大サイズを検査されるべきであり，最小サイズがあるmapフィールドは最小サイズも検査されるべきである．"
+    },
+    {
+      "task_id": "block_0510_s1",
+      "source_span": "2028-2028",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Map fields should have their keys validated, in addition to their values.",
+      "constraint": "Map fields should have their keys validated in addition to their values.",
+      "interpretation": "mapフィールドでは，値に加えてキーもバリデーションされるべきである．"
+    },
+    {
+      "task_id": "block_0514_s1",
+      "source_span": "2039-2041",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "When asserting a requirement in the positive, use \"must\".",
+      "constraint": "When asserting a requirement in the positive, use \"must\".",
+      "interpretation": "肯定形で要求事項を述べる場合は，\"must\"を使わなければならない．"
+    },
+    {
+      "task_id": "block_0514_s3",
+      "source_span": "2039-2041",
+      "source_strength": [
+        "obligation",
+        "recommendation"
+      ],
+      "original": "Words like \"should\" imply that the assertion is optional, and must be avoided.",
+      "constraint": "Words such as \"should\" must be avoided because they imply that the assertion is optional.",
+      "interpretation": "\"should\"のような語は，その主張が任意であることを示してしまうため，避けなければならない．"
+    },
+    {
+      "task_id": "block_0515_s1",
+      "source_span": "2042-2044",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "When asserting a formatting requirement in the negative, use \"must not\".",
+      "constraint": "When asserting a formatting requirement in the negative, use \"must not\".",
+      "interpretation": "否定形でフォーマット要件を述べる場合は，\"must not\"を使う．"
+    },
+    {
+      "task_id": "block_0515_s3",
+      "source_span": "2042-2044",
+      "source_strength": [
+        "obligation",
+        "prohibition"
+      ],
+      "original": "Words like \"should not\" imply that the assertion is optional, and must be avoided.",
+      "constraint": "Words such as \"should not\" must be avoided because they imply that the assertion is optional.",
+      "interpretation": "\"should not\"のような語は，その主張が任意であることを示してしまうため，避けなければならない．"
+    },
+    {
+      "task_id": "block_0519_s3",
+      "source_span": "2052-2054",
+      "source_strength": [
+        "prohibition"
+      ],
+      "original": "When specifying inequalities, use words rather than symbols. Do not use words like \"larger than\", \"bigger than\", \"more than\", \"higher than\", etc.",
+      "constraint": "When specifying inequalities, use words rather than symbols, and do not use words such as \"larger than\", \"bigger than\", \"more than\", or \"higher than\".",
+      "interpretation": "不等関係を指定する場合は記号ではなく語を使い，\"larger than\"，\"bigger than\"，\"more than\"，\"higher than\"のような語は使ってはならない．"
+    },
+    {
+      "task_id": "block_0523_s1",
+      "source_span": "2061-2061",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "A set of N fields, only one of which should be set at any given time - effectively a union.",
+      "constraint": "For a set of N fields that is effectively a union, only one field should be set at any given time.",
+      "interpretation": "実質的にunionであるN個のフィールドの集合では，任意の時点で設定されているフィールドは1つだけであるべきである．"
+    },
+    {
+      "task_id": "block_0525_s1",
+      "source_span": "2070-2078",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "When the user chooses to change the `discriminator` value (e.g., from `Type X` to `Type Y`) without changing any other fields then the system should clear the fields that were used to represent `Type X` in the union along with releasing resources that were attached to `Type X`.",
+      "constraint": "When the user changes the `discriminator` value, such as from `Type X` to `Type Y`, without changing any other fields, the system should clear the fields that represented `Type X` in the union and release resources that were attached to `Type X`.",
+      "interpretation": "ユーザーが他のフィールドを変更せずに`discriminator`値を`Type X`から`Type Y`へ変更するような場合，システムはunion内で`Type X`を表していたフィールドをクリアし，`Type X`に紐づいていたリソースを解放すべきである．"
+    },
+    {
+      "task_id": "block_0525_s2",
+      "source_span": "2070-2078",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "When the user chooses to change the `discriminator` value (e.g., from `Type X` to `Type Y`) without changing any other fields then the system should clear the fields that were used to represent `Type X` in the union along with releasing resources that were attached to `Type X`. This should automatically happen irrespective of how these values and resources were allocated (i.e., reserved by the user or automatically allocated by the system.",
+      "constraint": "When the user changes the `discriminator` value, such as from `Type X` to `Type Y`, without changing any other fields, the system should automatically clear the fields that represented `Type X` in the union and release resources that were attached to `Type X`, regardless of whether those values and resources were reserved by the user or automatically allocated by the system.",
+      "interpretation": "ユーザーが他のフィールドを変更せずに`discriminator`値を`Type X`から`Type Y`へ変更するような場合，システムは，その値やリソースがユーザーにより予約されたかシステムにより自動割り当てされたかにかかわらず，`Type X`を表していたunion内のフィールドを自動的にクリアし，`Type X`に紐づいていたリソースを解放すべきである．"
+    },
+    {
+      "task_id": "block_0526_s3",
+      "source_span": "2082-2087",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Many API types include values that are allocated on behalf of the user from some larger space (e.g. IP addresses from a range, or storage bucket names). These allocations are usually driven by controllers asynchronously to the user's API operations. Sometimes the user can request a specific value and a controller must confirm or reject that request.",
+      "constraint": "When the user requests a specific value for an API type value that is allocated on behalf of the user from a larger space, a controller must confirm or reject that request.",
+      "interpretation": "API型の値がIPアドレスやストレージバケット名のように大きな空間からユーザーのために割り当てられるものであり，ユーザーが特定の値を要求した場合，コントローラーはその要求を確認または拒否しなければならない．"
+    },
+    {
+      "task_id": "block_0527_s1",
+      "source_span": "2089-2091",
+      "source_strength": [
+        "obligation",
+        "prohibition"
+      ],
+      "original": "The common theme among all of these is that the system should not trust users with such fields, and must verify or otherwise confirm such requests before using them.",
+      "constraint": "The system must not trust users with fields that can affect security-relevant behavior, and must verify or otherwise confirm requests involving such fields before using them.",
+      "interpretation": "セキュリティに関係する挙動へ影響し得るフィールドについて，システムはユーザー入力をそのまま信用してはならない．そのようなフィールドを含む要求は，使用前に検証するか，別の方法で確認しなければならない．"
+    },
+    {
+      "task_id": "block_0534_s1",
+      "source_span": "2119-2122",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Service `externalIPs`: Users must specify one or more specific IPs in `spec`.",
+      "constraint": "Users must specify one or more specific IP addresses in `spec` for Service `externalIPs`.",
+      "interpretation": "Service の `externalIPs` では，ユーザーは `spec` 内に1つ以上の具体的な IP アドレスを指定しなければならない．"
+    },
+    {
+      "task_id": "block_0536_s1",
+      "source_span": "2131-2132",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "New APIs should almost never do this.",
+      "constraint": "New APIs should almost never place user-supplied desired state outside `status`.",
+      "interpretation": "新しい API は，ユーザーが指定する desired state を `status` の外に置く設計をほとんど採用すべきではない．"
+    },
+    {
+      "task_id": "block_0536_s2",
+      "source_span": "2131-2132",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "New APIs should almost never do this. Instead, they should use `status`.",
+      "constraint": "New APIs should almost never place user-supplied desired state outside `status`, and should use `status` instead.",
+      "interpretation": "新しい API は，ユーザーが指定する desired state を `status` の外に置く設計をほとんど採用すべきではなく，代わりに `status` を使うべきである．"
+    },
+    {
+      "task_id": "block_0543_s1",
+      "source_span": "2152-2161",
+      "source_strength": [
+        "recommendation"
+      ],
+      "original": "Since almost everything is happening asynchronously to almost everything else, controller implementations should take care around the ordering of operations.",
+      "constraint": "Controller implementations should take care around the ordering of operations because almost everything is happening asynchronously to almost everything else.",
+      "interpretation": "ほぼすべての処理が互いに非同期に進むため，コントローラー実装は操作の順序に注意を払うべきである．"
+    },
+    {
+      "task_id": "block_0543_s4",
+      "source_span": "2152-2161",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "For example, whether the controller updates a `status` field before or after it actuates a change depends on what guarantees need to be made to observers of the system. In some cases, writing to a `status` field represents an acknowledgement or acceptance of a `spec` value, and it is OK to write it before actuation. However, if it would be problematic for a client to observe the `status` value before it is actuated then the controller must actuate first and update `status` afterward.",
+      "constraint": "If it would be problematic for a client to observe a `status` value before the corresponding change is actuated, the controller must actuate the change first and update `status` afterward.",
+      "interpretation": "対応する変更が実際に反映される前にクライアントが `status` 値を観測すると問題になる場合，コントローラーは先にその変更を実行し，その後で `status` を更新しなければならない．"
+    },
+    {
+      "task_id": "block_0544_s1",
+      "source_span": "2163-2169",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "Controllers must take care to consider how a `status` field will be handled in the case of interrupted control loops (e.g. controller crash and restart), and must act idempotently and consistently.",
+      "constraint": "Controllers must consider how a `status` field will be handled when control loops are interrupted, such as by controller crash and restart, and must act idempotently and consistently.",
+      "interpretation": "コントローラーは，クラッシュと再起動などで制御ループが中断された場合に `status` フィールドをどう扱うかを考慮し，冪等かつ一貫した動作をしなければならない．"
+    },
+    {
+      "task_id": "block_0552_s1",
+      "source_span": "2188-2190",
+      "source_strength": [
+        "obligation"
+      ],
+      "original": "When using this pattern, you must account for lifecycle of the allocated objects (who cleans them up and when) as well as the \"linkage\" between them and the main type (often using the same name, an object-ref field, or a selector).",
+      "constraint": "When using this pattern, the API design must account for the lifecycle of the allocated objects, including who cleans them up and when, and for the linkage between the allocated objects and the main type, often using the same name, an object-ref field, or a selector.",
+      "interpretation": "このパターンを使う場合，API 設計は，割り当てられたオブジェクトのライフサイクル，つまり誰がいつクリーンアップするかを考慮しなければならない．また，割り当てられたオブジェクトとメイン型との結び付きについても，同じ名前，object-ref フィールド，または selector などを用いて考慮しなければならない．"
+    }
+  ],
+  "retry_attempts": []
+}
