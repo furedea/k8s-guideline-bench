@@ -354,6 +354,86 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert [sentence.id for sentence in tasks[2].context_sentences] == ["s6", "s7", "s9"]
 
 
+def test_extract_sentence_selection_tasks_offers_following_bullets_for_keyword_lead_in() -> None:
+    document = """
+## Section
+
+All JSON objects returned by an API MUST have the following fields:
+
+* kind: a string that identifies the schema this object should have
+* apiVersion: a string that identifies the version of the schema the object should have
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    task = tasks[0]
+    assert task.main_sentence.text == "All JSON objects returned by an API MUST have the following fields:"
+    assert task.block_original == (
+        "All JSON objects returned by an API MUST have the following fields: "
+        "kind: a string that identifies the schema this object should have "
+        "apiVersion: a string that identifies the version of the schema the object should have"
+    )
+    assert [sentence.text for sentence in task.context_sentences] == [
+        "kind: a string that identifies the schema this object should have",
+        "apiVersion: a string that identifies the version of the schema the object should have",
+    ]
+
+
+def test_extract_sentence_selection_tasks_offers_previous_keyword_for_referential_main_sentence() -> None:
+    document = """
+## Section
+
+New APIs should almost never put state in spec. Instead, they should use `status`.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert [task.main_sentence.id for task in tasks] == ["s1", "s2"]
+    assert [sentence.id for sentence in tasks[1].context_sentences] == ["s1"]
+    assert tasks[1].context_sentences[0].text == "New APIs should almost never put state in spec."
+
+
+def test_extract_sentence_selection_tasks_offers_previous_keyword_for_inline_references() -> None:
+    document = """
+## Section
+
+The API server should allow posting this field unset. Controllers must preserve it during updates.
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert [task.main_sentence.id for task in tasks] == ["s1", "s2"]
+    assert [sentence.id for sentence in tasks[1].context_sentences] == ["s1"]
+
+
+@pytest.mark.parametrize(
+    "referential_sentence",
+    [
+        "That value must be preserved during updates.",
+        "Such fields must be cleared when the discriminator changes.",
+        "Otherwise, clients should retry the request.",
+        "Thus, controllers must preserve the observed value.",
+        "Consequently, the API server should reject the update.",
+        "Accordingly, clients should use the status field.",
+        "In that case, controllers must report a condition.",
+        "For this reason, the field should be optional.",
+    ],
+)
+def test_extract_sentence_selection_tasks_offers_previous_keyword_for_referential_connectors(
+    referential_sentence: str,
+) -> None:
+    document = f"""
+## Section
+
+Controllers should allocate the value asynchronously. {referential_sentence}
+""".strip()
+
+    tasks = normative_audit.extract_sentence_selection_tasks(document)
+
+    assert [task.main_sentence.id for task in tasks] == ["s1", "s2"]
+    assert [sentence.id for sentence in tasks[1].context_sentences] == ["s1"]
+
+
 def test_build_selected_original_always_includes_main_sentence_in_source_order() -> None:
     document = """
 ## Section

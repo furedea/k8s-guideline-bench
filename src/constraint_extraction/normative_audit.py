@@ -35,6 +35,14 @@ _DEPRECATION_RE = re.compile(r"\bdeprecated\b")
 _PERMISSIVE_RE = re.compile(r"\bMAY(?:\s+NOT)?\b|\bmay(?:\s+not)?\b|\boptional(?:ly)?\b|\bcan\b")
 _EXAMPLE_SENTENCE_RE = re.compile(r"^Examples?:")
 _HTTP_STATUS_CODE_LABEL_RE = re.compile(r"^`?\d{3}\s+Status[A-Za-z0-9]+`?$")
+_REFERENTIAL_CONTEXT_RE = re.compile(
+    r"^(?:"
+    r"It|They|This|That|These|Those|Such|"
+    r"Instead|Otherwise|Therefore|However|Thus|Hence|Consequently|Accordingly|"
+    r"As such|In that case|For this reason"
+    r")\b|"
+    r"\b(?:it|its|itself|they|them|their|this|that|these|those|such)\b",
+)
 
 
 class CandidateKind(enum.StrEnum):
@@ -246,11 +254,17 @@ def extract_sentence_selection_artifacts(document_text: str) -> SentenceSelectio
     """Extract sentence selection tasks and the inclusion audit."""
     tasks: list[SentenceSelectionTask] = []
     audit_records: list[SentenceSelectionAuditRecord] = []
-    for block_index, block in enumerate(_collect_blocks(document_text), 1):
+    blocks = _collect_blocks(document_text)
+    for block_index, block in enumerate(blocks, 1):
         block_id = f"block_{block_index:04d}"
-        block_original = _normalize_block_text(block.text)
+        block_original = _selection_block_original(blocks, block_index - 1)
         sentences = _source_sentences(block.text)
         sentences = _exclude_reference_child_tasks(sentences, block)
+        following_context_sentences = _following_bullet_context_sentences(
+            blocks,
+            block_index - 1,
+            next_sentence_number=len(sentences) + 1,
+        )
         keyword_positions = tuple(index for index, sentence in enumerate(sentences) if sentence.has_keyword)
         shared_context_sentences = _shared_context_sentences(sentences, keyword_positions)
         audit_records.extend(
@@ -275,10 +289,11 @@ def extract_sentence_selection_artifacts(document_text: str) -> SentenceSelectio
                 block_original=block_original,
                 main_sentence=sentences[keyword_position],
                 shared_context_sentences=shared_context_sentences,
-                context_sentences=_bounded_context_sentences(
+                context_sentences=_task_context_sentences(
                     sentences=sentences,
                     keyword_positions=keyword_positions,
                     keyword_position_index=keyword_position_index,
+                    following_context_sentences=following_context_sentences,
                 ),
             )
             for keyword_position_index, keyword_position in enumerate(keyword_positions)
@@ -609,6 +624,14 @@ def _normalize_block_text(block_text: str) -> str:
     return normalized.strip()
 
 
+def _selection_block_original(blocks: tuple[SourceBlock, ...], block_index: int) -> str:
+    """Return the original excerpt used for sentence context selection."""
+    block = blocks[block_index]
+    parts = [_normalize_block_text(block.text)]
+    parts.extend(_normalize_block_text(child.text) for child in _following_bullet_blocks(blocks, block_index))
+    return " ".join(part for part in parts if part)
+
+
 def _split_paragraph_sentences(block_text: str) -> tuple[str, ...]:
     """Split a paragraph into sentence-like units without breaking wrapped lines."""
     normalized = _normalize_block_text(block_text)
@@ -633,6 +656,45 @@ def _source_sentences(block_text: str) -> tuple[SourceSentence, ...]:
             ),
         )
     return tuple(source_sentences)
+
+
+def _following_bullet_context_sentences(
+    blocks: tuple[SourceBlock, ...],
+    block_index: int,
+    *,
+    next_sentence_number: int,
+) -> tuple[SourceSentence, ...]:
+    """Return bullet sentences following a keyword lead-in as selectable context."""
+    block = blocks[block_index]
+    if not _is_bullet_lead_in(block.text):
+        return ()
+    context_sentences: list[SourceSentence] = []
+    sentence_number = next_sentence_number
+    for child in _following_bullet_blocks(blocks, block_index):
+        for sentence in _source_sentences(child.text):
+            context_sentences.append(
+                sentence.model_copy(
+                    update={
+                        "id": f"s{sentence_number}",
+                        "has_keyword": False,
+                    },
+                ),
+            )
+            sentence_number += 1
+    return tuple(context_sentences)
+
+
+def _following_bullet_blocks(blocks: tuple[SourceBlock, ...], block_index: int) -> tuple[SourceBlock, ...]:
+    """Return the consecutive bullet blocks immediately introduced by a paragraph."""
+    block = blocks[block_index]
+    if not _is_bullet_lead_in(block.text):
+        return ()
+    bullet_blocks: list[SourceBlock] = []
+    for child in blocks[block_index + 1 :]:
+        if child.section != block.section or child.kind != CandidateKind.BULLET:
+            break
+        bullet_blocks.append(child)
+    return tuple(bullet_blocks)
 
 
 def _exclude_reference_child_tasks(
@@ -741,11 +803,12 @@ def _shared_context_sentences(
     return tuple(sentence for sentence in sentences[:first_keyword_position] if not sentence.has_keyword)
 
 
-def _bounded_context_sentences(
+def _task_context_sentences(
     *,
     sentences: tuple[SourceSentence, ...],
     keyword_positions: tuple[int, ...],
     keyword_position_index: int,
+    following_context_sentences: tuple[SourceSentence, ...],
 ) -> tuple[SourceSentence, ...]:
     """Return non-keyword context bounded by neighboring keyword sentences."""
     keyword_position = keyword_positions[keyword_position_index]
@@ -755,7 +818,35 @@ def _bounded_context_sentences(
     )
     start_position = keyword_position + 1 if previous_keyword_position is None else previous_keyword_position + 1
     end_position = next_keyword_position if next_keyword_position is not None else len(sentences)
-    return tuple(sentence for sentence in sentences[start_position:end_position] if not sentence.has_keyword)
+    context_sentences: list[SourceSentence] = []
+    if (
+        _needs_previous_sentence_context(sentences[keyword_position])
+        and keyword_position > 0
+        and sentences[keyword_position - 1].has_keyword
+    ):
+        context_sentences.append(sentences[keyword_position - 1])
+    context_sentences.extend(
+        sentence for sentence in sentences[start_position:end_position] if not sentence.has_keyword
+    )
+    context_sentences.extend(following_context_sentences)
+    return _dedupe_source_sentences(context_sentences)
+
+
+def _needs_previous_sentence_context(sentence: SourceSentence) -> bool:
+    """Return whether a main sentence likely depends on its immediate predecessor."""
+    return _REFERENTIAL_CONTEXT_RE.search(sentence.text) is not None
+
+
+def _dedupe_source_sentences(sentences: list[SourceSentence]) -> tuple[SourceSentence, ...]:
+    """Return sentences in first-seen order, keyed by local sentence ID."""
+    seen: set[str] = set()
+    unique: list[SourceSentence] = []
+    for sentence in sentences:
+        if sentence.id in seen:
+            continue
+        seen.add(sentence.id)
+        unique.append(sentence)
+    return tuple(unique)
 
 
 def _sentence_number(sentence_id: str) -> int:
