@@ -1,6 +1,10 @@
 """CLI entry point for Stage 1 constraint extraction tools.
 
 Subcommands:
+    sentence-selection-tasks
+                      Generate sentence selection task JSON.
+    sentence-context-selection
+                      Select source context sentences with Codex.
     review-sheet      Generate atomic constraint review sheet CSV.
 """
 
@@ -35,10 +39,10 @@ REVIEW_SHEET_FIELDNAMES = [
 ]
 
 
-def main() -> None:
+def main(argv: tuple[str, ...] | None = None) -> None:
     """Dispatch to the selected subcommand."""
     parser = argparse.ArgumentParser(description="Stage 1: constraint extraction tools.")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
     _configure_review_sheet_parser(
         subparsers.add_parser(
             "review-sheet",
@@ -57,8 +61,44 @@ def main() -> None:
             help="Select source context sentences for generated sentence selection tasks.",
         ),
     )
-    arguments = parser.parse_args()
+    arguments = parser.parse_args(argv)
+    if arguments.command is None:
+        _run_default_constraint_pipeline()
+        return
     arguments.func(arguments)
+
+
+def _run_default_constraint_pipeline() -> None:
+    """Run the standard constraint extraction pipeline."""
+    print("[constraint-extraction] running sentence-selection-tasks", flush=True)
+    _run_sentence_selection_tasks(
+        argparse.Namespace(
+            conventions_path=None,
+            output_path=None,
+            audit_output_path=None,
+        ),
+    )
+    print("[constraint-extraction] running sentence-context-selection", flush=True)
+    _run_sentence_context_selection(
+        argparse.Namespace(
+            tasks_path=None,
+            output_path=None,
+            codex_command="codex",
+            model=None,
+            timeout_seconds=1800,
+            max_retries=3,
+            stream_codex_output=False,
+        ),
+    )
+    print("[constraint-extraction] running review-sheet", flush=True)
+    _run_review_sheet(
+        argparse.Namespace(
+            norms_path=None,
+            conventions_path=None,
+            interpretations_path=None,
+            output_path=None,
+        ),
+    )
 
 
 def _configure_review_sheet_parser(parser: argparse.ArgumentParser) -> None:

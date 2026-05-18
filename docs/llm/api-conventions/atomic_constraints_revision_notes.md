@@ -381,7 +381,28 @@ beyond_syntax = true:
 
 ## 実行手順
 
-まず，Markdown から `main_sentence` と候補文を機械的に作ります．既存の結果を残したい場合は，先に `sentence_selection_tasks.json` と `sentence_selection_audit.json` を `.old` などへ移動します．抽出ロジックを変えた場合も，同じファイル名で上書きされるため，前回結果を比較したいなら先に退避します．
+通常はサブコマンドを指定せずに実行します．この場合，次の順で標準工程が動きます．
+
+1. `sentence-selection-tasks`
+2. `sentence-context-selection`
+3. `review-sheet`
+
+```bash
+uv run python src/constraint_extraction/main.py
+```
+
+既存の結果を残したい場合は，先に生成物を `.old` などへ移動します．抽出ロジックを変えた場合も，同じファイル名で上書きされるため，前回結果を比較したいなら先に退避します．
+
+```bash
+mv docs/mechanical/api-conventions/sentence_selection_tasks.json \
+  docs/mechanical/api-conventions/sentence_selection_tasks.json.old
+mv docs/mechanical/api-conventions/sentence_selection_audit.json \
+  docs/mechanical/api-conventions/sentence_selection_audit.json.old
+mv docs/llm/api-conventions/sentence_context_selection.json \
+  docs/llm/api-conventions/sentence_context_selection.json.old
+```
+
+必要な工程だけを個別に動かす場合は，サブコマンドを指定します．まず，Markdown から `main_sentence` と候補文を機械的に作ります．
 
 ```bash
 uv run python src/constraint_extraction/main.py sentence-selection-tasks

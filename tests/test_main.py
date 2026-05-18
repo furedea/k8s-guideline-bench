@@ -7,6 +7,40 @@ from _pytest.capture import CaptureFixture
 from pytest_mock import MockerFixture
 
 
+def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: MockerFixture) -> None:
+    calls: list[str] = []
+    sentence_selection = mocker.patch(
+        "main._run_sentence_selection_tasks",
+        side_effect=lambda _: calls.append("sentence-selection-tasks"),
+    )
+    sentence_context_selection = mocker.patch(
+        "main._run_sentence_context_selection",
+        side_effect=lambda _: calls.append("sentence-context-selection"),
+    )
+    review_sheet = mocker.patch("main._run_review_sheet", side_effect=lambda _: calls.append("review-sheet"))
+
+    main.main(())
+
+    assert calls == ["sentence-selection-tasks", "sentence-context-selection", "review-sheet"]
+    sentence_selection.assert_called_once()
+    assert sentence_selection.call_args.args[0].conventions_path is None
+    assert sentence_selection.call_args.args[0].output_path is None
+    assert sentence_selection.call_args.args[0].audit_output_path is None
+    sentence_context_selection.assert_called_once()
+    assert sentence_context_selection.call_args.args[0].tasks_path is None
+    assert sentence_context_selection.call_args.args[0].output_path is None
+    assert sentence_context_selection.call_args.args[0].codex_command == "codex"
+    assert sentence_context_selection.call_args.args[0].model is None
+    assert sentence_context_selection.call_args.args[0].timeout_seconds == 1800
+    assert sentence_context_selection.call_args.args[0].max_retries == 3
+    assert sentence_context_selection.call_args.args[0].stream_codex_output is False
+    review_sheet.assert_called_once()
+    assert review_sheet.call_args.args[0].norms_path is None
+    assert review_sheet.call_args.args[0].conventions_path is None
+    assert review_sheet.call_args.args[0].interpretations_path is None
+    assert review_sheet.call_args.args[0].output_path is None
+
+
 def test_run_sentence_selection_tasks_writes_json_from_source_markdown(tmp_path: Path) -> None:
     conventions_path = tmp_path / "api-conventions.md"
     conventions_path.write_text(
