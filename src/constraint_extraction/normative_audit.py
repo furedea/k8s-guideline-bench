@@ -19,6 +19,7 @@ _KEYWORD_RE = re.compile(
     r"must(?: not)?|should(?: not)?|may(?: not)?|"
     r"required|recommended|preferred|deprecated"
     r")\b",
+    re.IGNORECASE,
 )
 _OBLIGATION_RE = re.compile(r"\bMUST\b(?!\s+NOT\b)|\bmust\b(?!\s+not\b)|\brequired\b")
 _RECOMMENDATION_RE = re.compile(
@@ -43,6 +44,7 @@ _REFERENTIAL_CONTEXT_RE = re.compile(
     r")\b|"
     r"\b(?:it|its|itself|they|them|their|this|that|these|those|such)\b",
 )
+_TWO_PREVIOUS_KEYWORDS_RE = re.compile(r"\bthe two\b|\bboth\b", re.IGNORECASE)
 
 
 class CandidateKind(enum.StrEnum):
@@ -265,8 +267,11 @@ def extract_sentence_selection_artifacts(document_text: str) -> SentenceSelectio
             block_index - 1,
             next_sentence_number=len(sentences) + 1,
         )
+        leading_context_sentences = _leading_context_sentences(blocks, block_index - 1)
         keyword_positions = tuple(index for index, sentence in enumerate(sentences) if sentence.has_keyword)
-        shared_context_sentences = _shared_context_sentences(sentences, keyword_positions)
+        shared_context_sentences = _dedupe_source_sentences(
+            [*leading_context_sentences, *_shared_context_sentences(sentences, keyword_positions)],
+        )
         audit_records.extend(
             _sentence_selection_audit_record(
                 block_id=block_id,
@@ -697,6 +702,44 @@ def _following_bullet_blocks(blocks: tuple[SourceBlock, ...], block_index: int) 
     return tuple(bullet_blocks)
 
 
+def _leading_context_sentences(blocks: tuple[SourceBlock, ...], block_index: int) -> tuple[SourceSentence, ...]:
+    """Return a preceding lead-in paragraph for a bullet block."""
+    block = blocks[block_index]
+    if block.kind != CandidateKind.BULLET or block_index == 0:
+        return ()
+    lead_in_block = _preceding_bullet_lead_in_block(blocks, block_index)
+    if lead_in_block is None:
+        return ()
+    lead_in = _last_sentence(_normalize_block_text(lead_in_block.text))
+    if not lead_in:
+        return ()
+    return (
+        SourceSentence(
+            id="s0",
+            text=lead_in,
+            has_keyword=False,
+            signal_tags=_sentence_signal_tags(lead_in),
+        ),
+    )
+
+
+def _preceding_bullet_lead_in_block(
+    blocks: tuple[SourceBlock, ...],
+    block_index: int,
+) -> SourceBlock | None:
+    """Return the paragraph that introduces the current consecutive bullet group."""
+    block = blocks[block_index]
+    for previous_block in reversed(blocks[:block_index]):
+        if previous_block.section != block.section:
+            return None
+        if previous_block.kind == CandidateKind.BULLET:
+            continue
+        if _is_bullet_lead_in(previous_block.text):
+            return previous_block
+        return None
+    return None
+
+
 def _exclude_reference_child_tasks(
     sentences: tuple[SourceSentence, ...],
     block: SourceBlock,
@@ -819,6 +862,11 @@ def _task_context_sentences(
     start_position = keyword_position + 1 if previous_keyword_position is None else previous_keyword_position + 1
     end_position = next_keyword_position if next_keyword_position is not None else len(sentences)
     context_sentences: list[SourceSentence] = []
+    if _needs_two_previous_keyword_context(sentences[keyword_position]):
+        context_sentences.extend(
+            sentences[position]
+            for position in keyword_positions[max(0, keyword_position_index - 2) : keyword_position_index]
+        )
     if (
         _needs_previous_sentence_context(sentences[keyword_position])
         and keyword_position > 0
@@ -835,6 +883,11 @@ def _task_context_sentences(
 def _needs_previous_sentence_context(sentence: SourceSentence) -> bool:
     """Return whether a main sentence likely depends on its immediate predecessor."""
     return _REFERENTIAL_CONTEXT_RE.search(sentence.text) is not None
+
+
+def _needs_two_previous_keyword_context(sentence: SourceSentence) -> bool:
+    """Return whether a main sentence likely refers to two prior keyword sentences."""
+    return _TWO_PREVIOUS_KEYWORDS_RE.search(sentence.text) is not None
 
 
 def _dedupe_source_sentences(sentences: list[SourceSentence]) -> tuple[SourceSentence, ...]:

@@ -139,6 +139,49 @@ def test_select_sentence_contexts_with_codex_retries_context_conflicts(mocker: M
     assert report.retry_attempts[0].details == ("s3",)
 
 
+def test_select_sentence_contexts_with_codex_batches_tasks_without_splitting_blocks(mocker: MockerFixture) -> None:
+    tasks = _tasks_for_two_blocks()
+    first_block_task_ids = tuple(task.id for task in tasks if task.block_id == tasks[0].block_id)
+    later_task_ids = tuple(task.id for task in tasks if task.block_id != tasks[0].block_id)
+
+    def fake_codex_run(prompt: str, **_: object) -> str:
+        return json.dumps(
+            {
+                "selections": [
+                    {"task_id": task.id, "selected_context_sentence_ids": []} for task in tasks if task.id in prompt
+                ],
+            },
+        )
+
+    codex_run = mocker.patch(
+        "sentence_context_selection.run_codex_context_selection",
+        side_effect=fake_codex_run,
+    )
+
+    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks, batch_size=1)
+
+    assert codex_run.call_count > 1
+    for task_id in first_block_task_ids:
+        assert task_id in codex_run.call_args_list[0].args[0]
+    for task_id in later_task_ids:
+        assert task_id not in codex_run.call_args_list[0].args[0]
+    assert tuple(selection.task_id for selection in report.selections) == tuple(task.id for task in tasks)
+
+
+def test_select_sentence_contexts_with_codex_skips_tasks_without_context_candidates(mocker: MockerFixture) -> None:
+    tasks = _tasks_without_context_candidates()
+    codex_run = mocker.patch("sentence_context_selection.run_codex_context_selection")
+
+    report = sentence_context_selection.select_sentence_contexts_with_codex(tasks)
+
+    codex_run.assert_not_called()
+    assert tuple(selection.task_id for selection in report.selections) == tuple(task.id for task in tasks)
+    assert all(selection.selected_context_sentence_ids == () for selection in report.selections)
+    assert all(
+        selection.original == task.main_sentence.text for selection, task in zip(report.selections, tasks, strict=True)
+    )
+
+
 def test_select_sentence_contexts_with_codex_fails_after_retry_limit(mocker: MockerFixture) -> None:
     tasks = _tasks()
     mocker.patch(
@@ -329,5 +372,28 @@ def _tasks() -> tuple[normative_audit.SentenceSelectionTask, ...]:
 ## Section
 
 Optionality affects API compatibility. Fields must be either optional or required. This avoids ambiguous client behavior. New fields should explicitly set either `+optional` or `+required`.
+""".strip()
+    return normative_audit.extract_sentence_selection_tasks(document)
+
+
+def _tasks_for_two_blocks() -> tuple[normative_audit.SentenceSelectionTask, ...]:
+    document = """
+## Section
+
+Optionality affects API compatibility. Fields must be either optional or required. This avoids ambiguous client behavior. New fields should explicitly set either `+optional` or `+required`.
+
+## Other Section
+Status carries observed state. Status fields must not duplicate spec fields.
+""".strip()
+    return normative_audit.extract_sentence_selection_tasks(document)
+
+
+def _tasks_without_context_candidates() -> tuple[normative_audit.SentenceSelectionTask, ...]:
+    document = """
+## Section
+
+Go field names must be PascalCase.
+
+JSON field names must be camelCase.
 """.strip()
     return normative_audit.extract_sentence_selection_tasks(document)
