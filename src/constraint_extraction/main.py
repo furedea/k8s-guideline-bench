@@ -14,8 +14,6 @@ Subcommands:
 
 import argparse
 import csv
-import json
-import os
 import sys
 from pathlib import Path
 
@@ -409,45 +407,6 @@ def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
     sentence_interpretation.save_interpretation_report(report, output_path)
     print(f"[sentence-interpretations] interpretations={len(report.interpretations)}")
     print(f"[sentence-interpretations] retry_attempts={len(report.retry_attempts)}")
-
-
-def _resolve_repo_path(
-    project_root: Path,
-    cli_repo_path: Path | None,
-    config_repo_path: Path | None,
-) -> Path:
-    """Resolve the external Kubernetes repository path."""
-    if cli_repo_path is not None:
-        return cli_repo_path if cli_repo_path.is_absolute() else project_root / cli_repo_path
-    env_repo_path = os.getenv(REPO_PATH_ENV_VAR)
-    if env_repo_path:
-        env_path = Path(env_repo_path)
-        return env_path if env_path.is_absolute() else project_root / env_path
-    if config_repo_path is not None:
-        return config_repo_path if config_repo_path.is_absolute() else project_root / config_repo_path
-    raise ValueError(
-        f"Kubernetes repository path is required. Pass --repo-path, set {REPO_PATH_ENV_VAR},"
-        " or define repo_path in the config.",
-    )
-
-
-def _resolve_output_path(project_root: Path, configured_path: Path) -> Path:
-    """Resolve an output path relative to the project root when needed."""
-    if configured_path.is_absolute():
-        return configured_path
-    return project_root / configured_path
-
-
-def _resolve_source_paths(
-    repo_path: Path,
-    sources: tuple[source_selection.GuidelineSource, ...],
-) -> tuple[source_selection.GuidelineSource, ...]:
-    """Resolve source document paths relative to the Kubernetes repo root."""
-    resolved_sources: list[source_selection.GuidelineSource] = []
-    for source in sources:
-        resolved_path = source.path if source.path.is_absolute() else repo_path / source.path
-        resolved_sources.append(source.model_copy(update={"path": resolved_path}))
-    return tuple(resolved_sources)
 
 
 def _build_review_row(
