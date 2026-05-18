@@ -4,55 +4,57 @@ from pathlib import Path
 
 import normative_audit
 import sentence_constraint_candidate
-import sentence_interpretation
+import sentence_context_selection
 from pytest_mock import MockerFixture
 
 
-def test_build_interpretation_tasks_uses_draft_constraints() -> None:
+def test_build_constraint_candidate_tasks_joins_sentence_tasks_with_selected_originals() -> None:
     sentence_tasks = _sentence_tasks()
-    draft_report = sentence_constraint_candidate.SentenceConstraintCandidateReport(
-        candidates=(
-            sentence_constraint_candidate.SentenceConstraintCandidate(
-                id=sentence_tasks[0].id,
+    context_report = sentence_context_selection.SentenceContextSelectionReport(
+        selections=(
+            sentence_context_selection.SentenceContextSelection(
                 task_id=sentence_tasks[0].id,
-                source_span=sentence_tasks[0].source_span,
-                source_strength=("obligation",),
+                selected_context_sentence_ids=("s1",),
                 original="Optionality affects API compatibility. Fields must be either optional or required.",
-                constraint="Fields must be either optional or required.",
+            ),
+            sentence_context_selection.SentenceContextSelection(
+                task_id=sentence_tasks[1].id,
+                selected_context_sentence_ids=(),
+                original="New fields should explicitly set either `+optional` or `+required`.",
             ),
         ),
+        conflicts=(),
     )
 
-    tasks = sentence_interpretation.build_interpretation_tasks(draft_report)
+    tasks = sentence_constraint_candidate.build_constraint_candidate_tasks(sentence_tasks, context_report)
 
     assert tasks[0].id == sentence_tasks[0].id
     assert tasks[0].source_span == sentence_tasks[0].source_span
     assert tasks[0].source_strength == ("obligation",)
     assert tasks[0].original == ("Optionality affects API compatibility. Fields must be either optional or required.")
-    assert tasks[0].constraint == "Fields must be either optional or required."
 
 
-def test_select_interpretations_with_codex_writes_one_interpretation_per_task(mocker: MockerFixture) -> None:
-    tasks = _interpretation_tasks()
+def test_select_constraint_candidates_with_codex_writes_one_draft_per_original(mocker: MockerFixture) -> None:
+    tasks = _candidate_tasks()
     codex_run = mocker.patch(
-        "sentence_interpretation.run_codex_interpretation",
+        "sentence_constraint_candidate.run_codex_constraint_candidates",
         side_effect=(
             json.dumps(
                 {
-                    "interpretations": [
+                    "tasks": [
                         {
                             "task_id": tasks[0].id,
-                            "interpretation": "Fields must be either optional or required.",
+                            "constraint": "Fields must be either optional or required.",
                         },
                     ],
                 },
             ),
             json.dumps(
                 {
-                    "interpretations": [
+                    "tasks": [
                         {
                             "task_id": tasks[1].id,
-                            "interpretation": "New fields should explicitly set optional or required.",
+                            "constraint": "New fields should set optional or required tags.",
                         },
                     ],
                 },
@@ -60,7 +62,7 @@ def test_select_interpretations_with_codex_writes_one_interpretation_per_task(mo
         ),
     )
 
-    report = sentence_interpretation.select_interpretations_with_codex(
+    report = sentence_constraint_candidate.select_constraint_candidates_with_codex(
         tasks,
         codex_command="codex",
         model="gpt-5.2",
@@ -70,45 +72,55 @@ def test_select_interpretations_with_codex_writes_one_interpretation_per_task(mo
 
     assert codex_run.call_count == 2
     assert "Return JSON only" in codex_run.call_args_list[0].args[0]
+    assert "write exactly one draft constraint for each original" in codex_run.call_args_list[0].args[0]
     assert codex_run.call_args_list[0].kwargs["model"] == "gpt-5.2"
-    assert report.interpretations[0].interpretation == ("Fields must be either optional or required.")
-    assert report.interpretations[1].source_strength == ("recommendation",)
+    assert tuple(candidate.id for candidate in report.candidates) == (
+        tasks[0].id,
+        tasks[1].id,
+    )
+    assert report.candidates[0].constraint == "Fields must be either optional or required."
     assert report.retry_attempts == ()
 
 
-def test_select_interpretations_with_codex_retries_missing_task_selection(mocker: MockerFixture) -> None:
-    tasks = _interpretation_tasks()
+def test_select_constraint_candidates_with_codex_retries_missing_task_candidates(mocker: MockerFixture) -> None:
+    tasks = _candidate_tasks()
     mocker.patch(
-        "sentence_interpretation.run_codex_interpretation",
+        "sentence_constraint_candidate.run_codex_constraint_candidates",
         side_effect=(
             json.dumps(
                 {
-                    "interpretations": [
-                        {"task_id": tasks[0].id, "interpretation": "A"},
+                    "tasks": [
+                        {
+                            "task_id": tasks[0].id,
+                            "constraint": "A",
+                        },
                     ],
                 },
             ),
             json.dumps(
                 {
-                    "interpretations": [
-                        {"task_id": tasks[1].id, "interpretation": "B"},
+                    "tasks": [
+                        {
+                            "task_id": tasks[1].id,
+                            "constraint": "B",
+                        },
                     ],
                 },
             ),
         ),
     )
 
-    report = sentence_interpretation.select_interpretations_with_codex(tasks, max_retries=1)
+    report = sentence_constraint_candidate.select_constraint_candidates_with_codex(tasks, max_retries=1)
 
-    assert tuple(item.task_id for item in report.interpretations) == tuple(task.id for task in tasks)
-    assert report.retry_attempts[0].reason == "missing_task_interpretation"
+    assert tuple(candidate.task_id for candidate in report.candidates) == (tasks[0].id, tasks[1].id)
+    assert report.retry_attempts[0].reason == "missing_task_constraints"
     assert report.retry_attempts[0].task_ids == (tasks[1].id,)
 
 
-def test_run_codex_interpretation_uses_schema_and_last_message(mocker: MockerFixture) -> None:
+def test_run_codex_constraint_candidates_uses_schema_and_last_message(mocker: MockerFixture) -> None:
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         output_path = Path(command[command.index("--output-last-message") + 1])
-        output_path.write_text('{"interpretations":[]}', encoding="utf-8")
+        output_path.write_text('{"tasks":[]}', encoding="utf-8")
         assert command[:2] == ["codex", "exec"]
         assert "--output-schema" in command
         assert command[-1] == "-"
@@ -117,36 +129,36 @@ def test_run_codex_interpretation_uses_schema_and_last_message(mocker: MockerFix
         assert kwargs["capture_output"] is True
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    run = mocker.patch("sentence_interpretation.subprocess.run", side_effect=fake_run)
+    run = mocker.patch("sentence_constraint_candidate.subprocess.run", side_effect=fake_run)
 
-    response = sentence_interpretation.run_codex_interpretation(
+    response = sentence_constraint_candidate.run_codex_constraint_candidates(
         "prompt",
         codex_command="codex",
         model="gpt-5.2",
         timeout_seconds=30,
     )
 
-    assert response == '{"interpretations":[]}'
+    assert response == '{"tasks":[]}'
     assert "--model" in run.call_args.args[0]
 
 
-def test_load_and_save_interpretation_report(tmp_path: Path) -> None:
-    output_path = tmp_path / "interpretations.json"
-    report = sentence_interpretation.SentenceInterpretationReport(
-        interpretations=(
-            sentence_interpretation.SentenceInterpretation(
+def test_load_and_save_constraint_candidate_report(tmp_path: Path) -> None:
+    output_path = tmp_path / "constraint-candidates.json"
+    report = sentence_constraint_candidate.SentenceConstraintCandidateReport(
+        candidates=(
+            sentence_constraint_candidate.SentenceConstraintCandidate(
+                id="block_0001_s1",
                 task_id="block_0001_s1",
                 source_span="10-10",
                 source_strength=("obligation",),
                 original="Fields must be either optional or required.",
                 constraint="Fields must be either optional or required.",
-                interpretation="Fields must be either optional or required.",
             ),
         ),
     )
 
-    sentence_interpretation.save_interpretation_report(report, output_path)
-    loaded = sentence_interpretation.load_interpretation_report(output_path)
+    sentence_constraint_candidate.save_constraint_candidate_report(report, output_path)
+    loaded = sentence_constraint_candidate.load_constraint_candidate_report(output_path)
 
     assert loaded == report
 
@@ -160,21 +172,19 @@ Optionality affects API compatibility. Fields must be either optional or require
     return normative_audit.extract_sentence_selection_tasks(document)
 
 
-def _interpretation_tasks() -> tuple[sentence_interpretation.SentenceInterpretationTask, ...]:
+def _candidate_tasks() -> tuple[sentence_constraint_candidate.SentenceConstraintCandidateTask, ...]:
     sentence_tasks = _sentence_tasks()
     return (
-        sentence_interpretation.SentenceInterpretationTask(
+        sentence_constraint_candidate.SentenceConstraintCandidateTask(
             id=sentence_tasks[0].id,
             source_span=sentence_tasks[0].source_span,
             source_strength=("obligation",),
             original="Fields must be either optional or required.",
-            constraint="Fields must be either optional or required.",
         ),
-        sentence_interpretation.SentenceInterpretationTask(
+        sentence_constraint_candidate.SentenceConstraintCandidateTask(
             id=sentence_tasks[1].id,
             source_span=sentence_tasks[1].source_span,
             source_strength=("recommendation",),
             original="New fields should explicitly set either `+optional` or `+required`.",
-            constraint="New fields should explicitly set either `+optional` or `+required`.",
         ),
     )

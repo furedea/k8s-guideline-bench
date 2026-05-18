@@ -17,6 +17,10 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
         "main._run_sentence_context_selection",
         side_effect=lambda _: calls.append("sentence-context-selection"),
     )
+    sentence_constraint_candidates = mocker.patch(
+        "main._run_sentence_constraint_candidates",
+        side_effect=lambda _: calls.append("sentence-constraint-candidates"),
+    )
     sentence_interpretations = mocker.patch(
         "main._run_sentence_interpretations",
         side_effect=lambda _: calls.append("sentence-interpretations"),
@@ -28,6 +32,7 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert calls == [
         "sentence-selection-tasks",
         "sentence-context-selection",
+        "sentence-constraint-candidates",
         "sentence-interpretations",
         "review-sheet",
     ]
@@ -44,9 +49,18 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_context_selection.call_args.args[0].max_retries == 3
     assert sentence_context_selection.call_args.args[0].batch_size == 25
     assert sentence_context_selection.call_args.args[0].stream_codex_output is False
+    sentence_constraint_candidates.assert_called_once()
+    assert sentence_constraint_candidates.call_args.args[0].tasks_path is None
+    assert sentence_constraint_candidates.call_args.args[0].context_selection_path is None
+    assert sentence_constraint_candidates.call_args.args[0].output_path is None
+    assert sentence_constraint_candidates.call_args.args[0].codex_command == "codex"
+    assert sentence_constraint_candidates.call_args.args[0].model is None
+    assert sentence_constraint_candidates.call_args.args[0].timeout_seconds == 1800
+    assert sentence_constraint_candidates.call_args.args[0].max_retries == 3
+    assert sentence_constraint_candidates.call_args.args[0].batch_size == 25
+    assert sentence_constraint_candidates.call_args.args[0].stream_codex_output is False
     sentence_interpretations.assert_called_once()
-    assert sentence_interpretations.call_args.args[0].tasks_path is None
-    assert sentence_interpretations.call_args.args[0].context_selection_path is None
+    assert sentence_interpretations.call_args.args[0].constraint_candidates_path is None
     assert sentence_interpretations.call_args.args[0].output_path is None
     assert sentence_interpretations.call_args.args[0].codex_command == "codex"
     assert sentence_interpretations.call_args.args[0].model is None
@@ -154,14 +168,14 @@ Optionality affects API compatibility. Fields must be either optional or require
     assert "[sentence-context-selection] retry_attempts=0" in output
 
 
-def test_run_sentence_interpretations_writes_llm_interpretations(
+def test_run_sentence_constraint_candidates_writes_llm_candidates(
     tmp_path: Path,
     mocker: MockerFixture,
     capsys: CaptureFixture[str],
 ) -> None:
     tasks_path = tmp_path / "tasks.json"
     context_selection_path = tmp_path / "context-selection.json"
-    output_path = tmp_path / "interpretations.json"
+    output_path = tmp_path / "constraint-candidates.json"
     document = """
 ## Section
 
@@ -183,6 +197,83 @@ Optionality affects API compatibility. Fields must be either optional or require
         conflicts=(),
     )
     main.sentence_context_selection.save_context_selection_report(context_report, context_selection_path)
+    select_candidates = mocker.patch(
+        "main.sentence_constraint_candidate.select_constraint_candidates_with_codex",
+        return_value=main.sentence_constraint_candidate.SentenceConstraintCandidateReport(
+            candidates=(
+                main.sentence_constraint_candidate.SentenceConstraintCandidate(
+                    id=tasks[0].id,
+                    task_id=tasks[0].id,
+                    source_span=tasks[0].source_span,
+                    source_strength=("obligation",),
+                    original="Optionality affects API compatibility. Fields must be either optional or required.",
+                    constraint="Fields must be either optional or required.",
+                ),
+            ),
+        ),
+    )
+
+    main._run_sentence_constraint_candidates(
+        argparse.Namespace(
+            tasks_path=tasks_path,
+            context_selection_path=context_selection_path,
+            output_path=output_path,
+            codex_command="codex",
+            model="gpt-5.2",
+            timeout_seconds=120,
+            max_retries=2,
+            batch_size=10,
+            stream_codex_output=True,
+        ),
+    )
+
+    select_candidates.assert_called_once()
+    assert select_candidates.call_args.kwargs["codex_command"] == "codex"
+    assert select_candidates.call_args.kwargs["model"] == "gpt-5.2"
+    assert select_candidates.call_args.kwargs["timeout_seconds"] == 120
+    assert select_candidates.call_args.kwargs["max_retries"] == 2
+    assert select_candidates.call_args.kwargs["batch_size"] == 10
+    assert select_candidates.call_args.kwargs["stream_output"] is True
+    saved = json.loads(output_path.read_text(encoding="utf-8"))
+    assert saved["candidates"][0]["constraint"] == "Fields must be either optional or required."
+    output = capsys.readouterr().out
+    assert "[sentence-constraint-candidates] loading tasks from" in output
+    assert "[sentence-constraint-candidates] loading context selections from" in output
+    assert (
+        "[sentence-constraint-candidates] running codex for 1 tasks "
+        "(model=gpt-5.2, timeout=120s, max_retries=2, batch_size=10, stream_codex_output=True)" in output
+    )
+    assert "[sentence-constraint-candidates] writing report to" in output
+    assert "[sentence-constraint-candidates] candidates=1" in output
+    assert "[sentence-constraint-candidates] retry_attempts=0" in output
+
+
+def test_run_sentence_interpretations_writes_llm_interpretations(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    capsys: CaptureFixture[str],
+) -> None:
+    constraint_candidates_path = tmp_path / "constraint-candidates.json"
+    output_path = tmp_path / "interpretations.json"
+    document = """
+## Section
+
+Optionality affects API compatibility. Fields must be either optional or required.
+""".strip()
+    tasks = main.normative_audit.extract_sentence_selection_tasks(document)
+    draft_report = main.sentence_constraint_candidate.SentenceConstraintCandidateReport(
+        candidates=(
+            main.sentence_constraint_candidate.SentenceConstraintCandidate(
+                id=tasks[0].id,
+                task_id=tasks[0].id,
+                source_span=tasks[0].source_span,
+                source_strength=("obligation",),
+                original="Optionality affects API compatibility. Fields must be either optional or required.",
+                constraint="Fields must be either optional or required.",
+            ),
+        ),
+    )
+    main.sentence_constraint_candidate.save_constraint_candidate_report(draft_report, constraint_candidates_path)
     select_interpretations = mocker.patch(
         "main.sentence_interpretation.select_interpretations_with_codex",
         return_value=main.sentence_interpretation.SentenceInterpretationReport(
@@ -192,6 +283,7 @@ Optionality affects API compatibility. Fields must be either optional or require
                     source_span=tasks[0].source_span,
                     source_strength=("obligation",),
                     original="Optionality affects API compatibility. Fields must be either optional or required.",
+                    constraint="Fields must be either optional or required.",
                     interpretation="Fields must be either optional or required.",
                 ),
             ),
@@ -200,8 +292,7 @@ Optionality affects API compatibility. Fields must be either optional or require
 
     main._run_sentence_interpretations(
         argparse.Namespace(
-            tasks_path=tasks_path,
-            context_selection_path=context_selection_path,
+            constraint_candidates_path=constraint_candidates_path,
             output_path=output_path,
             codex_command="codex",
             model="gpt-5.2",
@@ -222,8 +313,7 @@ Optionality affects API compatibility. Fields must be either optional or require
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["interpretations"][0]["interpretation"] == ("Fields must be either optional or required.")
     output = capsys.readouterr().out
-    assert "[sentence-interpretations] loading tasks from" in output
-    assert "[sentence-interpretations] loading context selections from" in output
+    assert "[sentence-interpretations] loading constraint candidates from" in output
     assert (
         "[sentence-interpretations] running codex for 1 tasks "
         "(model=gpt-5.2, timeout=120s, max_retries=2, batch_size=10, stream_codex_output=True)" in output

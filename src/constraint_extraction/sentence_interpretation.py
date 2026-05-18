@@ -1,4 +1,4 @@
-"""LLM-assisted interpretation generation for selected source originals."""
+"""LLM-assisted interpretation generation for draft constraints."""
 
 from __future__ import annotations
 
@@ -10,26 +10,27 @@ from pathlib import Path
 from typing import Any, cast
 
 import base
-import normative_audit
-import sentence_context_selection
+import sentence_constraint_candidate
 
 
 class SentenceInterpretationTask(base.FrozenModel):
-    """One selected original that needs a concise reviewer-facing interpretation."""
+    """One draft constraint that needs a concise reviewer-facing interpretation."""
 
     id: str
     source_span: str
     source_strength: tuple[str, ...]
     original: str
+    constraint: str
 
 
 class SentenceInterpretation(base.FrozenModel):
-    """A generated interpretation for one selected original."""
+    """A generated interpretation for one draft constraint."""
 
     task_id: str
     source_span: str
     source_strength: tuple[str, ...]
     original: str
+    constraint: str
     interpretation: str
 
 
@@ -43,7 +44,7 @@ class InterpretationRetryAttempt(base.FrozenModel):
 
 
 class SentenceInterpretationReport(base.FrozenModel):
-    """LLM interpretation report for selected source originals."""
+    """LLM interpretation report for draft constraints."""
 
     interpretations: tuple[SentenceInterpretation, ...]
     retry_attempts: tuple[InterpretationRetryAttempt, ...] = ()
@@ -85,30 +86,19 @@ class SentenceInterpretationRetryError(RuntimeError):
 
 
 def build_interpretation_tasks(
-    sentence_tasks: tuple[normative_audit.SentenceSelectionTask, ...],
-    context_report: sentence_context_selection.SentenceContextSelectionReport,
+    draft_report: sentence_constraint_candidate.SentenceConstraintCandidateReport,
 ) -> tuple[SentenceInterpretationTask, ...]:
-    """Join sentence selection tasks with selected originals for interpretation."""
-    selections_by_task_id = {selection.task_id: selection for selection in context_report.selections}
-    tasks: list[SentenceInterpretationTask] = []
-    for sentence_task in sentence_tasks:
-        selection = selections_by_task_id[sentence_task.id]
-        tasks.append(
-            SentenceInterpretationTask(
-                id=sentence_task.id,
-                source_span=sentence_task.source_span,
-                source_strength=_source_strength(sentence_task.main_sentence.signal_tags),
-                original=selection.original,
-            ),
+    """Build interpretation tasks from draft constraints."""
+    return tuple(
+        SentenceInterpretationTask(
+            id=draft.id,
+            source_span=draft.source_span,
+            source_strength=draft.source_strength,
+            original=draft.original,
+            constraint=draft.constraint,
         )
-    return tuple(tasks)
-
-
-def _source_strength(signal_tags: tuple[normative_audit.SignalTag, ...]) -> tuple[str, ...]:
-    """Return reviewer-facing source strength tags."""
-    values = tuple(tag.value for tag in signal_tags)
-    stronger_values = tuple(value for value in values if value != normative_audit.SignalTag.PERMISSIVE.value)
-    return stronger_values or values
+        for draft in draft_report.candidates
+    )
 
 
 def load_interpretation_report(path: Path) -> SentenceInterpretationReport:
@@ -162,7 +152,7 @@ def select_interpretations_with_codex(
     max_retries: int = 3,
     batch_size: int = 25,
 ) -> SentenceInterpretationReport:
-    """Run Codex in batches to generate concise source interpretations."""
+    """Run Codex in batches to generate concise draft interpretations."""
     reports = tuple(
         _select_interpretation_batch_with_codex(
             batch,
@@ -253,6 +243,7 @@ def build_interpretation_prompt(
             "source_span": task.source_span,
             "source_strength": task.source_strength,
             "original": task.original,
+            "constraint": task.constraint,
         }
         for task in tasks
     ]
@@ -264,9 +255,10 @@ def build_interpretation_prompt(
             f"{json.dumps(retry_payload, ensure_ascii=False, indent=2)}\n"
         )
     return (
-        "You are Codex. For each task, interpret the normative meaning of the original source text.\n"
+        "You are Codex. For each task, interpret the normative meaning of the draft constraint.\n"
         "Write the interpretation in Japanese for human review.\n"
-        "Do not invent requirements beyond the original. Do not split into atomic constraints yet.\n"
+        "Use the original source text to keep the interpretation grounded.\n"
+        "Do not invent requirements beyond the original and draft constraint. Do not split into atomic constraints.\n"
         "Keep each interpretation concise and concrete enough for a reviewer to judge grounding.\n"
         "Return JSON only with this schema:\n"
         '{"interpretations":[{"task_id":"...","interpretation":"..."}]}\n\n'
@@ -327,6 +319,7 @@ def _select_interpretation_batch_with_codex(
                 source_span=task.source_span,
                 source_strength=task.source_strength,
                 original=task.original,
+                constraint=task.constraint,
                 interpretation=interpretations_by_task_id[task.id],
             )
             for task in tasks
@@ -402,6 +395,7 @@ def _interpretation_from_json(document: object) -> SentenceInterpretation:
         source_span=str(interpretation_document["source_span"]),
         source_strength=tuple(str(item) for item in _list_field(interpretation_document, "source_strength")),
         original=str(interpretation_document["original"]),
+        constraint=str(interpretation_document["constraint"]),
         interpretation=str(interpretation_document["interpretation"]),
     )
 
