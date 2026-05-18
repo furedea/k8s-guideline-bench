@@ -5,6 +5,8 @@ Subcommands:
                       Generate sentence selection task JSON.
     sentence-context-selection
                       Select source context sentences with Codex.
+    sentence-interpretations
+                      Generate source interpretations with Codex.
     review-sheet      Generate atomic constraint review sheet CSV.
 """
 
@@ -21,6 +23,7 @@ for _stage in ("constraint_extraction", "common", ""):
 
 import normative_audit  # noqa: E402
 import sentence_context_selection  # noqa: E402
+import sentence_interpretation  # noqa: E402
 
 REVIEW_SHEET_FIELDNAMES = [
     "id",
@@ -61,6 +64,12 @@ def main(argv: tuple[str, ...] | None = None) -> None:
             help="Select source context sentences for generated sentence selection tasks.",
         ),
     )
+    _configure_sentence_interpretations_parser(
+        subparsers.add_parser(
+            "sentence-interpretations",
+            help="Generate source interpretations for selected originals.",
+        ),
+    )
     arguments = parser.parse_args(argv)
     if arguments.command is None:
         _run_default_constraint_pipeline()
@@ -82,6 +91,20 @@ def _run_default_constraint_pipeline() -> None:
     _run_sentence_context_selection(
         argparse.Namespace(
             tasks_path=None,
+            output_path=None,
+            codex_command="codex",
+            model=None,
+            timeout_seconds=1800,
+            max_retries=3,
+            batch_size=25,
+            stream_codex_output=False,
+        ),
+    )
+    print("[constraint-extraction] running sentence-interpretations", flush=True)
+    _run_sentence_interpretations(
+        argparse.Namespace(
+            tasks_path=None,
+            context_selection_path=None,
             output_path=None,
             codex_command="codex",
             model=None,
@@ -127,6 +150,19 @@ def _configure_sentence_context_selection_parser(parser: argparse.ArgumentParser
     _ = parser.add_argument("--batch-size", type=int, default=25)
     _ = parser.add_argument("--stream-codex-output", action="store_true")
     parser.set_defaults(func=_run_sentence_context_selection)
+
+
+def _configure_sentence_interpretations_parser(parser: argparse.ArgumentParser) -> None:
+    _ = parser.add_argument("--tasks-path", type=Path, default=None)
+    _ = parser.add_argument("--context-selection-path", type=Path, default=None)
+    _ = parser.add_argument("--output-path", type=Path, default=None)
+    _ = parser.add_argument("--codex-command", type=str, default="codex")
+    _ = parser.add_argument("--model", type=str, default=None)
+    _ = parser.add_argument("--timeout-seconds", type=int, default=1800)
+    _ = parser.add_argument("--max-retries", type=int, default=3)
+    _ = parser.add_argument("--batch-size", type=int, default=25)
+    _ = parser.add_argument("--stream-codex-output", action="store_true")
+    parser.set_defaults(func=_run_sentence_interpretations)
 
 
 def _run_review_sheet(arguments: argparse.Namespace) -> None:
@@ -233,6 +269,57 @@ def _run_sentence_context_selection(arguments: argparse.Namespace) -> None:
         print(
             f"[sentence-context-selection] invalid ... {len(report.invalid_context_selections) - 10} more",
         )
+
+
+def _run_sentence_interpretations(arguments: argparse.Namespace) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    docs_dir = project_root / "docs"
+    tasks_path = arguments.tasks_path or (
+        docs_dir / "mechanical" / "api-conventions" / "sentence_selection_tasks.json"
+    )
+    context_selection_path = arguments.context_selection_path or (
+        docs_dir / "llm" / "api-conventions" / "sentence_context_selection.json"
+    )
+    output_path = arguments.output_path or (docs_dir / "llm" / "api-conventions" / "sentence_interpretations.json")
+    print(f"[sentence-interpretations] loading tasks from {tasks_path}", flush=True)
+    sentence_tasks = sentence_context_selection.load_sentence_selection_tasks(tasks_path)
+    print(f"[sentence-interpretations] loading context selections from {context_selection_path}", flush=True)
+    context_report = sentence_context_selection.load_context_selection_report(context_selection_path)
+    tasks = sentence_interpretation.build_interpretation_tasks(sentence_tasks, context_report)
+    if output_path.exists():
+        existing_report = sentence_interpretation.load_interpretation_report(output_path)
+        existing_validation = sentence_interpretation.validate_existing_report(existing_report, tasks)
+        if existing_validation.is_reusable:
+            print(f"[sentence-interpretations] skip existing report: {output_path}")
+            print(f"[sentence-interpretations] interpretations={len(existing_report.interpretations)}")
+            print(f"[sentence-interpretations] retry_attempts={len(existing_report.retry_attempts)}")
+            return
+        print(
+            f"[sentence-interpretations] existing report is not reusable: {existing_validation.reason}",
+            flush=True,
+        )
+    print(
+        f"[sentence-interpretations] running codex for {len(tasks)} tasks "
+        f"(model={arguments.model or 'codex default'}, timeout={arguments.timeout_seconds}s, "
+        f"max_retries={arguments.max_retries}, batch_size={arguments.batch_size}, "
+        f"stream_codex_output={arguments.stream_codex_output})",
+        flush=True,
+    )
+    report = sentence_interpretation.select_interpretations_with_codex(
+        tasks,
+        codex_command=arguments.codex_command,
+        model=arguments.model,
+        timeout_seconds=arguments.timeout_seconds,
+        max_retries=arguments.max_retries,
+        batch_size=arguments.batch_size,
+        stream_output=arguments.stream_codex_output,
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"[sentence-interpretations] writing report to {output_path}", flush=True)
+    sentence_interpretation.save_interpretation_report(report, output_path)
+    print(f"[sentence-interpretations] interpretations={len(report.interpretations)}")
+    print(f"[sentence-interpretations] retry_attempts={len(report.retry_attempts)}")
 
 
 def _load_norms(path: Path) -> list[dict[str, Any]]:
