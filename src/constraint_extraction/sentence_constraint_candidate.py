@@ -13,6 +13,11 @@ import base
 import normative_audit
 import sentence_context_selection
 
+_UNRESOLVED_DEMONSTRATIVE_RE = re.compile(
+    r"^(?:This|That|These|Those|It|They|Such|Instead|As such|In these cases)\b|"
+    r"\b(?:this schema|these fields|these values|this field|that field|those fields)\b",
+)
+
 
 class SentenceConstraintCandidateTask(base.FrozenModel):
     """One selected original that needs one draft constraint."""
@@ -21,6 +26,7 @@ class SentenceConstraintCandidateTask(base.FrozenModel):
     source_span: str
     source_strength: tuple[str, ...]
     original: str
+    reference_context: tuple[str, ...] = ()
 
 
 class SentenceConstraintCandidate(base.FrozenModel):
@@ -92,6 +98,7 @@ def build_constraint_candidate_tasks(
     """Join sentence selection tasks with selected originals for candidate generation."""
     selections_by_task_id = {selection.task_id: selection for selection in context_report.selections}
     tasks: list[SentenceConstraintCandidateTask] = []
+    previous_blocks: list[normative_audit.SentenceSelectionTask] = []
     for sentence_task in sentence_tasks:
         selection = selections_by_task_id[sentence_task.id]
         tasks.append(
@@ -100,8 +107,11 @@ def build_constraint_candidate_tasks(
                 source_span=sentence_task.source_span,
                 source_strength=_source_strength(sentence_task.main_sentence.signal_tags),
                 original=selection.original,
+                reference_context=_reference_context_for(sentence_task, selection.original, tuple(previous_blocks)),
             ),
         )
+        if not previous_blocks or previous_blocks[-1].block_id != sentence_task.block_id:
+            previous_blocks.append(sentence_task)
     return tuple(tasks)
 
 
@@ -249,6 +259,7 @@ def build_constraint_candidate_prompt(
             "source_span": task.source_span,
             "source_strength": task.source_strength,
             "original": task.original,
+            "reference_context": task.reference_context,
         }
         for task in tasks
     ]
@@ -263,6 +274,7 @@ def build_constraint_candidate_prompt(
         "You are Codex. For each task, rewrite the original source text into exactly one reviewable draft "
         "constraint.\n"
         "Preserve the normative meaning of the original and stay grounded only in the original.\n"
+        "Use reference_context only as local wording context; prefer explicit nouns over unresolved demonstratives.\n"
         "Do not split the original into multiple rows. "
         "If the original contains multiple requirements, keep them in one draft constraint.\n"
         "A human reviewer will decide whether the draft is atomic. Do not add interpretations or explanations.\n"
@@ -410,6 +422,33 @@ def _source_strength(signal_tags: tuple[normative_audit.SignalTag, ...]) -> tupl
     values = tuple(tag.value for tag in signal_tags)
     stronger_values = tuple(value for value in values if value != normative_audit.SignalTag.PERMISSIVE.value)
     return stronger_values or values
+
+
+def _reference_context_for(
+    sentence_task: normative_audit.SentenceSelectionTask,
+    original: str,
+    previous_blocks: tuple[normative_audit.SentenceSelectionTask, ...],
+) -> tuple[str, ...]:
+    if not _has_unresolved_demonstrative(original):
+        return ()
+    references = [f"Section: {sentence_task.section}"]
+    references.extend(
+        f"Previous block: {previous_block.block_original}"
+        for previous_block in _previous_blocks_in_section(sentence_task, previous_blocks)
+    )
+    return tuple(references)
+
+
+def _previous_blocks_in_section(
+    sentence_task: normative_audit.SentenceSelectionTask,
+    previous_blocks: tuple[normative_audit.SentenceSelectionTask, ...],
+) -> tuple[normative_audit.SentenceSelectionTask, ...]:
+    section_blocks = tuple(block for block in previous_blocks if block.section == sentence_task.section)
+    return section_blocks[-2:]
+
+
+def _has_unresolved_demonstrative(text: str) -> bool:
+    return bool(_UNRESOLVED_DEMONSTRATIVE_RE.search(text))
 
 
 def _constraint_candidate_from_json(document: object) -> SentenceConstraintCandidate:
