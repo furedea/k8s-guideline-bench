@@ -69,8 +69,7 @@ def test_main_without_subcommand_runs_default_constraint_pipeline(mocker: Mocker
     assert sentence_interpretations.call_args.args[0].batch_size == 25
     assert sentence_interpretations.call_args.args[0].stream_codex_output is False
     review_sheet.assert_called_once()
-    assert review_sheet.call_args.args[0].norms_path is None
-    assert review_sheet.call_args.args[0].conventions_path is None
+    assert review_sheet.call_args.args[0].constraint_candidates_path is None
     assert review_sheet.call_args.args[0].interpretations_path is None
     assert review_sheet.call_args.args[0].output_path is None
 
