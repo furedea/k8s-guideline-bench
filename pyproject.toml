@@ -3,7 +3,7 @@ name = "k8s-guideline-bench"
 version = "0.1.0"
 description = "Benchmark pipeline for evaluating AI agent compliance with Kubernetes coding guidelines."
 readme = "README.md"
-requires-python = "== 3.14.*"
+requires-python = "==3.14.5"
 dependencies = [
   "anthropic==0.96.0",
   "httpx==0.28.1",
